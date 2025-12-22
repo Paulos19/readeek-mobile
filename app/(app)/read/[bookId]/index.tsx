@@ -12,11 +12,9 @@ import { HighlightMenu } from './_components/HighlightMenu';
 import { repairBookMetadata } from 'lib/api';
 
 export default function ReaderPage() {
-  // Adicionado 'title' aos parâmetros
   const { bookId, author, hasCover, title } = useLocalSearchParams<{ bookId: string, author?: string, hasCover?: string, title?: string }>();
   const { state, actions, refs, gestures } = useReader(bookId);
 
-  // --- AUTO-REPARO DE METADADOS ---
   useEffect(() => {
     const checkAndRepairMetadata = async () => {
       const needsCheck = !hasCover || hasCover === 'false' || !author || author === 'Autor desconhecido';
@@ -31,9 +29,7 @@ export default function ReaderPage() {
     if (bookId) checkAndRepairMetadata();
   }, [bookId, author, hasCover]);
 
-  // --- MEMOIZAÇÃO DO HTML ---
-  // CORREÇÃO: Removido 'state.fontSize' das dependências.
-  // A mudança de fonte agora ocorre via injeção de JS, sem recarregar o HTML (que resetava para a capa).
+  // Renderiza HTML apenas na carga inicial do conteúdo
   const html = useMemo(() => {
       if (!state.bookBase64) return '';
       return generateReaderHTML({
@@ -41,9 +37,9 @@ export default function ReaderPage() {
           initialLocation: state.initialLocation,
           highlights: state.highlights,
           theme: THEMES[state.currentTheme],
-          fontSize: state.fontSize // Usa o tamanho inicial, ajustes subsequentes são via JS
+          fontSize: state.fontSize
       });
-  }, [state.bookBase64, state.currentTheme, state.highlights]); // state.fontSize removido intencionalmente
+  }, [state.bookBase64]); 
 
   if (state.isLoading || !state.bookBase64) {
     return (
@@ -66,16 +62,19 @@ export default function ReaderPage() {
 
           <GestureDetector gesture={gestures.pinchGesture}>
               <View style={{ flex: 1, position: 'relative' }}>
-                  {/* Áreas de Navegação */}
+                  
+                  {/* Laterais Invisíveis (Navegação Rápida) */}
+                  {/* Adicionado bg-transparent para garantir captura do toque no Android */}
                   <Pressable 
-                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '20%', zIndex: 10 }}
+                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '20%', zIndex: 10, backgroundColor: 'transparent' }}
                     onPress={actions.prevPage}
                   />
                   <Pressable 
-                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '20%', zIndex: 10 }}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '20%', zIndex: 10, backgroundColor: 'transparent' }}
                     onPress={actions.nextPage}
                   />
 
+                  {/* WebView Central */}
                   <WebView 
                     ref={refs.webviewRef}
                     originWhitelist={['*']}
@@ -99,7 +98,7 @@ export default function ReaderPage() {
               toc={state.toc}
               highlights={state.highlights}
               progress={state.progress}
-              title={title || "Livro"} // Passando o título
+              title={title || "Livro"}
               onToggleExpand={(val) => {
                   if (typeof val === 'boolean') actions.setMenuExpanded(val);
                   else actions.setMenuExpanded(!state.menuExpanded);

@@ -1,158 +1,172 @@
-// app/(app)/read/[bookId]/_utils/htmlGenerator.ts
+import { Highlight } from 'lib/api';
 
-import { Highlight } from "lib/api";
-
-interface HtmlProps {
-  bookBase64: string;
-  initialLocation: string | null;
-  highlights: Highlight[];
-  theme: any;
-  fontSize: number;
+interface HtmlParams {
+    bookBase64: string;
+    initialLocation: string | null;
+    highlights: Highlight[];
+    theme: { bg: string; text: string };
+    fontSize: number;
 }
 
-export const generateReaderHTML = ({
-  bookBase64,
-  initialLocation,
-  highlights,
-  theme,
-  fontSize
-}: HtmlProps) => {
-  // Serialização segura
-  const safeHighlights = JSON.stringify(highlights || []);
-  const safeTheme = JSON.stringify(theme);
-  
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
-      <style>
-        body { margin: 0; padding: 0; background-color: ${theme.bg}; height: 100vh; width: 100vw; overflow: hidden; }
-        /* Importante: permite toques mas avisa o browser que não vamos dar zoom nativo */
-        #viewer { width: 100%; height: 100%; touch-action: pan-x pan-y; }
-        ::selection { background: rgba(255, 235, 59, 0.5); }
-      </style>
-    </head>
-    <body>
-      <div id="viewer"></div>
-      <script>
-        const msg = (type, data) => window.ReactNativeWebView.postMessage(JSON.stringify({ type, ...data }));
-        const log = (m) => msg('LOG', { msg: m });
-
+export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, theme, fontSize }: HtmlParams) => {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background-color: ${theme.bg}; 
+            color: ${theme.text};
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            -webkit-user-select: none; /* Melhora performance de gestos */
+            user-select: none;
+        }
+        #viewer {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+        /* Estilos para Highlighting */
+        .epubjs-hl-yellow { fill: yellow; fill-opacity: 0.3; mix-blend-mode: multiply; }
+        .epubjs-hl-red { fill: #ffadad; fill-opacity: 0.3; mix-blend-mode: multiply; }
+        .epubjs-hl-blue { fill: #a0c4ff; fill-opacity: 0.3; mix-blend-mode: multiply; }
+        .epubjs-hl-green { fill: #9bf6ff; fill-opacity: 0.3; mix-blend-mode: multiply; }
+    </style>
+</head>
+<body>
+    <div id="viewer"></div>
+    <script>
+        // Inicialização Segura
         try {
-            const bookData = "${bookBase64}";
-            const initialCfi = ${initialLocation ? JSON.stringify(initialLocation) : 'null'};
-            const savedHighlights = ${safeHighlights};
-            const initialTheme = ${safeTheme};
-            const initialFontSize = ${fontSize};
+            var book = ePub("data:application/epub+zip;base64,${bookBase64}");
+            var rendition = book.renderTo("viewer", {
+                width: "100%",
+                height: "100%",
+                flow: "paginated",
+                manager: "default"
+            });
 
-            function base64ToArrayBuffer(base64) {
-                var binary_string = window.atob(base64);
-                var len = binary_string.length;
-                var bytes = new Uint8Array(len);
-                for (var i = 0; i < len; i++) { bytes[i] = binary_string.charCodeAt(i); }
-                return bytes.buffer;
+            var locationToLoad = "${initialLocation || ''}";
+            if(locationToLoad && locationToLoad !== 'null') {
+                rendition.display(locationToLoad);
+            } else {
+                rendition.display();
             }
 
-            const book = ePub(base64ToArrayBuffer(bookData));
-            const rendition = book.renderTo("viewer", { width: "100%", height: "100%", flow: "paginated", manager: "default" });
-
-            // Funções Globais
-            window.applyTheme = (style) => {
-                rendition.themes.register('custom', { 
-                    body: { color: style.text, background: style.bg, 'font-family': 'Helvetica, sans-serif' },
-                    p: { 'line-height': '1.6 !important' } 
-                });
-                rendition.themes.select('custom');
-                // Aplica no body do iframe e do pai
-                document.body.style.backgroundColor = style.bg;
+            var themes = { 
+                fontSize: "${fontSize}%", 
+                body: { 
+                    "color": "${theme.text}", 
+                    "background": "${theme.bg}" 
+                } 
             };
+            rendition.themes.register("custom", themes);
+            rendition.themes.select("custom");
 
-            window.setFontSize = (percent) => {
-                rendition.themes.fontSize(percent + "%");
-            };
+            // --- LISTENERS E INTERAÇÕES ---
 
-            // Setup Inicial
-            window.applyTheme(initialTheme);
-            window.setFontSize(initialFontSize);
-
-            book.ready.then(() => {
-                const toc = book.navigation.toc.map(c => ({ label: c.label, href: c.href }));
-                msg('TOC', { toc });
-                return book.locations.generate(1000);
-            });
-
-            const displayPromise = initialCfi ? rendition.display(initialCfi) : rendition.display();
-
-            displayPromise.then(() => {
-                savedHighlights.forEach(h => {
-                    rendition.annotations.add('highlight', h.cfiRange, {}, null, 'hl-' + h.id);
+            rendition.on('rendered', function(section) {
+                // Carrega Highlights
+                var currentHighlights = ${JSON.stringify(highlights)};
+                currentHighlights.forEach(function(hl) {
+                    try {
+                        rendition.annotations.add('highlight', hl.cfiRange, {}, null, 'hl-' + hl.id);
+                    } catch(e) {}
                 });
 
-                // --- SISTEMA DE TOQUE CORRIGIDO ---
-                // Usamos rendition.on para capturar eventos dentro do Iframe do livro
-                let startX = 0;
-                let startY = 0;
-                let startTime = 0;
-
-                rendition.on('touchstart', (e) => {
-                    startX = e.changedTouches[0].clientX;
-                    startY = e.changedTouches[0].clientY;
-                    startTime = new Date().getTime();
-                });
-
-                rendition.on('touchend', (e) => {
-                    const endX = e.changedTouches[0].clientX;
-                    const endY = e.changedTouches[0].clientY;
-                    const diffX = endX - startX;
-                    const diffY = endY - startY;
-                    const timeDiff = new Date().getTime() - startTime;
-
-                    // Tolerância: se moveu mais que 20px ou demorou, é scroll/seleção
-                    if (Math.abs(diffX) > 20 || Math.abs(diffY) > 20 || timeDiff > 600) return;
-
-                    const w = window.innerWidth;
-                    
-                    // Zona Central (Menu): 20% a 80% da tela
-                    if (endX > w * 0.2 && endX < w * 0.8) {
-                        msg('TOGGLE_UI', {});
-                    } 
-                    // Zona Direita (Próximo)
-                    else if (endX >= w * 0.8) {
-                        rendition.next();
-                    } 
-                    // Zona Esquerda (Anterior)
-                    else if (endX <= w * 0.2) {
-                        rendition.prev();
+                // Listener de Seleção (Texto)
+                // Usa on 'selected' para capturar quando o usuário termina de selecionar
+                rendition.on('selected', function(cfiRange, contents) {
+                    rendition.getRange(cfiRange).then(function(range) {
+                        if(range) {
+                            var text = range.toString();
+                            window.ReactNativeWebView.postMessage(JSON.stringify({
+                                type: 'SELECTION',
+                                cfiRange: cfiRange,
+                                text: text
+                            }));
+                        }
+                    });
+                    // Limpa a seleção visual nativa para evitar artefatos
+                    if(contents && contents.window) {
+                        contents.window.getSelection().removeAllRanges();
                     }
                 });
-
-                // Seleção de Texto
-                rendition.on('selected', (cfiRange, contents) => {
-                    book.getRange(cfiRange).then(range => {
-                        msg('SELECTION', { cfiRange, text: range.toString() });
-                    });
-                    return true;
+                
+                // Clique em Marcadores
+                rendition.on('markClicked', function(cfiRange, data, contents) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HIGHLIGHT_CLICKED', cfiRange: cfiRange }));
                 });
-
-                rendition.on('markClicked', (cfiRange) => msg('HIGHLIGHT_CLICKED', { cfiRange }));
             });
 
-            rendition.on("relocated", (location) => {
-                let percent = 0;
-                if(book.locations.length() > 0) percent = book.locations.percentageFromCfi(location.start.cfi);
-                else if(location.start.percentage) percent = location.start.percentage;
-                msg('LOC', { cfi: location.start.cfi, percentage: percent });
+            // --- GESTÃO DE CLIQUES E MENU (Correção Crítica) ---
+            rendition.on('click', function(e, contents) {
+                try {
+                    // Verifica se há seleção de texto ativa
+                    var hasSelection = false;
+                    if (contents && contents.window) {
+                        var sel = contents.window.getSelection();
+                        if (sel && sel.toString().length > 0) hasSelection = true;
+                    }
+
+                    // Se tiver texto selecionado, não faz nada (deixa o menu de seleção aparecer)
+                    if (hasSelection) return;
+
+                    // Bloqueia a navegação padrão do Epub.js
+                    e.preventDefault();
+                    
+                    // Envia sinal para o React Native abrir/fechar o menu
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOGGLE_UI' }));
+                } catch(err) {
+                    // Fallback em caso de erro bizarro, tenta abrir o menu
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOGGLE_UI' }));
+                }
             });
 
-            window.rendition = rendition;
+            // --- OUTROS EVENTOS ---
+            rendition.on('relocated', function(location) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'LOC',
+                    cfi: location.start.cfi,
+                    percentage: location.start.percentage
+                }));
+            });
 
-        } catch (e) { log('Error: ' + e.message); }
-      </script>
-    </body>
-    </html>
-  `;
+            book.loaded.navigation.then(function(toc) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'TOC',
+                    toc: toc
+                }));
+            });
+
+            // --- FUNÇÕES INJETADAS ---
+            window.setFontSize = function(size) {
+                rendition.themes.fontSize(size + "%");
+            };
+
+            window.applyTheme = function(theme) {
+                rendition.themes.register("custom", { 
+                    body: { "color": theme.text, "background": theme.bg } 
+                });
+                rendition.themes.select("custom");
+                document.body.style.backgroundColor = theme.bg;
+                document.body.style.color = theme.text;
+            };
+
+        } catch (error) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOG', msg: error.toString() }));
+        }
+    </script>
+</body>
+</html>
+    `;
 };

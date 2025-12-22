@@ -15,7 +15,6 @@ export const THEMES = {
     sepia: { name: 'Sépia', bg: '#f6f1d1', text: '#5f4b32', ui: 'light' }
 };
 
-// Função auxiliar para "planar" a árvore de capítulos
 const flattenToc = (items: any[]): any[] => {
     return items.reduce((acc, item) => {
         acc.push({ label: item.label, href: item.href });
@@ -47,7 +46,6 @@ export function useReader(rawBookId: string | string[]) {
     const [activeTab, setActiveTab] = useState<'settings' | 'chapters' | 'highlights'>('settings');
     
     const [fontSize, setFontSize] = useState(100);
-    // SharedValue para evitar crash no Reanimated (UI Thread)
     const fontSizeSv = useSharedValue(100); 
 
     const [currentTheme, setCurrentTheme] = useState<'dark' | 'light' | 'sepia'>('dark');
@@ -60,27 +58,31 @@ export function useReader(rawBookId: string | string[]) {
         });
     }, [navigation]);
 
-    // Sincroniza o SharedValue sempre que o State muda
-    useEffect(() => {
-        fontSizeSv.value = fontSize;
-    }, [fontSize]);
+    useEffect(() => { fontSizeSv.value = fontSize; }, [fontSize]);
 
     useEffect(() => {
         if (!bookId) { router.back(); return; }
         const load = async () => {
             try {
-                const savedSize = await AsyncStorage.getItem('@reader_fontsize');
-                const savedTheme = await AsyncStorage.getItem('@reader_theme');
-                
+                // Carrega configs em paralelo
+                const [savedSize, savedTheme, savedCfi, remoteHighlights, bookExists] = await Promise.all([
+                    AsyncStorage.getItem('@reader_fontsize'),
+                    AsyncStorage.getItem('@reader_theme'),
+                    AsyncStorage.getItem(`@progress:${bookId}`),
+                    highlightService.getByBook(bookId).catch(() => [] as Highlight[]),
+                    fileManager.checkBookExists(bookId)
+                ]);
+
                 if (savedSize) {
                     const size = parseInt(savedSize);
                     setFontSize(size);
                     fontSizeSv.value = size;
                 }
                 if (savedTheme) setCurrentTheme(savedTheme as any);
+                if (savedCfi) setInitialLocation(savedCfi);
+                setHighlights(remoteHighlights);
 
-                const exists = await fileManager.checkBookExists(bookId);
-                if (!exists) throw new Error("Livro não encontrado");
+                if (!bookExists) throw new Error("Livro não encontrado");
 
                 const uri = fileManager.getLocalBookUri(bookId);
                 const info = await FileSystem.getInfoAsync(uri);
@@ -89,13 +91,6 @@ export function useReader(rawBookId: string | string[]) {
                 const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as any });
                 setBookBase64(base64);
 
-                const savedCfi = await AsyncStorage.getItem(`@progress:${bookId}`);
-                if (savedCfi) setInitialLocation(savedCfi);
-
-                try {
-                    const remote = await highlightService.getByBook(bookId);
-                    setHighlights(remote);
-                } catch (e) {}
             } catch (error) {
                 console.error("Reader Load Error:", error);
                 Alert.alert("Erro", "Falha ao carregar livro.");
@@ -118,13 +113,9 @@ export function useReader(rawBookId: string | string[]) {
         });
     }, []);
 
-    // --- CORREÇÃO DO GESTO DE PINÇA ---
-    // Removemos a lógica do onUpdate que causava o crash e aplicamos apenas no onEnd
     const pinchGesture = Gesture.Pinch()
         .onEnd((e) => {
-            // Calcula o novo tamanho baseado no valor inicial * escala
             const newSize = fontSizeSv.value * e.scale;
-            // Executa a mudança de estado na Thread JS de forma segura
             runOnJS(changeFontSize)(newSize);
         });
 
@@ -142,13 +133,12 @@ export function useReader(rawBookId: string | string[]) {
                     }, 1500);
                     break;
                 case 'TOC': 
-                    // APLICA O FLATTEN AQUI PARA PEGAR SUB-CAPÍTULOS
                     setToc(flattenToc(data.toc)); 
                     break;
                 case 'SELECTION': setSelection({ cfiRange: data.cfiRange, text: data.text }); setMenuVisible(false); break;
                 case 'TOGGLE_UI': toggleMenu(); break;
                 case 'HIGHLIGHT_CLICKED': setMenuVisible(true); setMenuExpanded(true); setActiveTab('highlights'); break;
-                case 'LOG': console.log("[WebView]", data.msg); break;
+                case 'LOG': console.log("[WebView Log]", data.msg); break;
             }
         } catch (e) {}
     }, [bookId, menuVisible, fontSize]);
