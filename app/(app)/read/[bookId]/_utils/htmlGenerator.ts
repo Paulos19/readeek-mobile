@@ -17,6 +17,7 @@ export const generateReaderHTML = ({
   theme,
   fontSize
 }: HtmlProps) => {
+  // Serialização segura
   const safeHighlights = JSON.stringify(highlights || []);
   const safeTheme = JSON.stringify(theme);
   
@@ -30,7 +31,8 @@ export const generateReaderHTML = ({
       <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
       <style>
         body { margin: 0; padding: 0; background-color: ${theme.bg}; height: 100vh; width: 100vw; overflow: hidden; }
-        #viewer { width: 100%; height: 100%; touch-action: none; } /* touch-action previne zoom nativo do browser */
+        /* Importante: permite toques mas avisa o browser que não vamos dar zoom nativo */
+        #viewer { width: 100%; height: 100%; touch-action: pan-x pan-y; }
         ::selection { background: rgba(255, 235, 59, 0.5); }
       </style>
     </head>
@@ -58,12 +60,14 @@ export const generateReaderHTML = ({
             const book = ePub(base64ToArrayBuffer(bookData));
             const rendition = book.renderTo("viewer", { width: "100%", height: "100%", flow: "paginated", manager: "default" });
 
+            // Funções Globais
             window.applyTheme = (style) => {
                 rendition.themes.register('custom', { 
                     body: { color: style.text, background: style.bg, 'font-family': 'Helvetica, sans-serif' },
                     p: { 'line-height': '1.6 !important' } 
                 });
                 rendition.themes.select('custom');
+                // Aplica no body do iframe e do pai
                 document.body.style.backgroundColor = style.bg;
             };
 
@@ -71,6 +75,7 @@ export const generateReaderHTML = ({
                 rendition.themes.fontSize(percent + "%");
             };
 
+            // Setup Inicial
             window.applyTheme(initialTheme);
             window.setFontSize(initialFontSize);
 
@@ -87,7 +92,8 @@ export const generateReaderHTML = ({
                     rendition.annotations.add('highlight', h.cfiRange, {}, null, 'hl-' + h.id);
                 });
 
-                // --- SISTEMA DE TOQUE REFINADO (BUG FIX) ---
+                // --- SISTEMA DE TOQUE CORRIGIDO ---
+                // Usamos rendition.on para capturar eventos dentro do Iframe do livro
                 let startX = 0;
                 let startY = 0;
                 let startTime = 0;
@@ -105,21 +111,20 @@ export const generateReaderHTML = ({
                     const diffY = endY - startY;
                     const timeDiff = new Date().getTime() - startTime;
 
-                    // Se moveu muito ou demorou muito, é arrasto/seleção, não clique
-                    if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10 || timeDiff > 500) return;
+                    // Tolerância: se moveu mais que 20px ou demorou, é scroll/seleção
+                    if (Math.abs(diffX) > 20 || Math.abs(diffY) > 20 || timeDiff > 600) return;
 
-                    // Lógica de Zonas
                     const w = window.innerWidth;
                     
-                    // Zona Central (Menu): 60% do centro
+                    // Zona Central (Menu): 20% a 80% da tela
                     if (endX > w * 0.2 && endX < w * 0.8) {
                         msg('TOGGLE_UI', {});
                     } 
-                    // Zona Direita (Próximo): 20% direita
+                    // Zona Direita (Próximo)
                     else if (endX >= w * 0.8) {
                         rendition.next();
                     } 
-                    // Zona Esquerda (Anterior): 20% esquerda
+                    // Zona Esquerda (Anterior)
                     else if (endX <= w * 0.2) {
                         rendition.prev();
                     }
@@ -130,7 +135,6 @@ export const generateReaderHTML = ({
                     book.getRange(cfiRange).then(range => {
                         msg('SELECTION', { cfiRange, text: range.toString() });
                     });
-                    // Retorna true para permitir menu nativo se quiser, ou false para custom
                     return true;
                 });
 

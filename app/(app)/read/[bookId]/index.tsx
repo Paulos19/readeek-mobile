@@ -18,7 +18,7 @@ export default function ReaderPage() {
     return (
         <View className="flex-1 bg-zinc-950 items-center justify-center">
             <ActivityIndicator size="large" color="#10b981" />
-            <Text className="text-zinc-500 mt-4">Abrindo biblioteca...</Text>
+            <Text className="text-zinc-500 mt-4">Carregando livro...</Text>
         </View>
     );
   }
@@ -34,11 +34,12 @@ export default function ReaderPage() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaView className="flex-1 bg-zinc-950" edges={['top', 'bottom']}>
-          {/* StatusBar some quando o menu fecha para imersão total */}
           <StatusBar 
             hidden={!state.menuVisible} 
             barStyle={state.currentTheme === 'light' || state.currentTheme === 'sepia' ? 'dark-content' : 'light-content'}
             showHideTransition="fade"
+            translucent
+            backgroundColor="transparent"
           />
 
           <GestureDetector gesture={gestures.pinchGesture}>
@@ -65,7 +66,10 @@ export default function ReaderPage() {
               fontSize={state.fontSize}
               toc={state.toc}
               highlights={state.highlights}
-              onToggleExpand={() => actions.setMenuExpanded(!state.menuExpanded)}
+              onToggleExpand={(val) => {
+                  if (typeof val === 'boolean') actions.setMenuExpanded(val);
+                  else actions.setMenuExpanded(!state.menuExpanded);
+              }}
               onSetTab={actions.setActiveTab}
               onChangeFont={(delta) => actions.changeFontSize(state.fontSize + delta)}
               onChangeTheme={actions.changeTheme}
@@ -79,7 +83,6 @@ export default function ReaderPage() {
               onClose={() => actions.setSelection(null)}
               onSelectColor={actions.addHighlight}
           />
-
         </SafeAreaView>
     </GestureHandlerRootView>
   );

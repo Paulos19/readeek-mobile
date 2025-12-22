@@ -1,93 +1,77 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  Image, 
-  TouchableOpacity, 
-  RefreshControl, 
-  Alert, 
-  ActivityIndicator 
-} from 'react-native';
+// app/(app)/dashboard.tsx
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, Text, TouchableOpacity, RefreshControl, ScrollView, StatusBar, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Download, BookOpen, Trash2, LogOut } from 'lucide-react-native';
+import { LogOut, Crown, TrendingUp, Users, BookOpen, Download, CheckCircle2 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
+// API & Libs
 import { api } from 'lib/api';
 import { fileManager } from 'lib/files';
 import { useAuthStore } from 'stores/useAuthStore';
 
-// Tipagem alinhada com o retorno da API e Schema do Prisma
-interface Book {
-  id: string;
-  title: string;
-  author: string | null;
-  coverUrl: string | null;
-  progress: number;       // Inteiro (0-100)
-  filePath: string;       // URL do EPUB
-  currentLocation: string | null; // CFI para o sync
-}
+// IMPORTANTE: Importando do local centralizado
+import { Book, UserRole } from './_types/book';
 
-// Extensão para controle de estado local da interface
-interface BookWithStatus extends Book {
-  isDownloaded: boolean;
-  isDownloading: boolean;
-  downloadProgress: number;
-}
+// Componentes UI
+import { HeroBanner } from './_components/HeroBanner';
+import { GreetingHeader } from './_components/GreetingHeader';
 
 export default function Dashboard() {
   const { user, signOut } = useAuthStore();
-  const [books, setBooks] = useState<BookWithStatus[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
-  // Função auxiliar para atualizar o estado de um livro específico na lista
-  const updateBookStatus = (id: string, updates: Partial<BookWithStatus>) => {
-    setBooks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-  };
+  const [allBooks, setAllBooks] = useState<Book[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
+  // --- BUSCA DE DADOS ---
   const fetchBooks = async () => {
     try {
-      // 1. Busca lista de livros do Backend
+      // 1. Pega livros do Backend
       const response = await api.get('/mobile/books');
-      const apiBooks: Book[] = response.data;
+      const apiBooks = response.data;
 
-      // 2. Processa cada livro para verificar download e sincronia
-      const booksWithStatus = await Promise.all(apiBooks.map(async (book) => {
-        // Verifica se o arquivo físico existe
+      // 2. Hidrata com dados locais (Download e Progresso)
+      const processedBooks: Book[] = await Promise.all(apiBooks.map(async (book: any) => {
         const isDownloaded = await fileManager.checkBookExists(book.id);
         
-        // --- LÓGICA DE SYNC REVERSO (Nuvem -> Local) ---
-        // Se a API trouxe uma localização (CFI), verificamos o storage local
+        // Tratamento de segurança para o Role (Garante que é ADMIN ou USER)
+        const rawRole = book.userRole || 'USER';
+        const safeRole: UserRole = (rawRole === 'ADMIN' || rawRole === 'USER') ? rawRole : 'USER';
+
+        // Mock seguro para o Owner caso a API não envie completo
+        const mockOwner = book.owner || { 
+            id: book.userId || 'unknown', 
+            name: book.userName || 'Readeek', 
+            image: book.userImage || null,
+            role: safeRole
+        };
+
+        // Sync Reverso (Nuvem -> Local)
         if (book.currentLocation) {
              const localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
-             
-             // Se a nuvem tem uma posição diferente da local, assumimos que a nuvem é mais recente
-             // (Ex: Usuário leu na web e abriu o app agora)
+             // Se a nuvem estiver diferente do local, atualizamos o local (assumindo nuvem mais recente)
              if (book.currentLocation !== localCfi) {
                  await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
-                 console.log(`[Dashboard] Sync Aplicado para '${book.title}':`, book.currentLocation.substring(0, 15) + "...");
-                 
-                 // Opcional: Atualizar também a porcentagem local se o backend mandar
-                 if (book.progress > 0) {
-                    await AsyncStorage.setItem(`@percent:${book.id}`, (book.progress / 100).toString());
-                 }
              }
         }
 
         return {
           ...book,
+          owner: mockOwner,
+          downloadsCount: book.downloadsCount || 0,
           isDownloaded,
           isDownloading: false,
-          downloadProgress: 0
+          downloadProgress: 0,
+          progress: book.progress || 0
         };
       }));
 
-      setBooks(booksWithStatus);
+      setAllBooks(processedBooks);
     } catch (error) {
-      console.error("Erro ao buscar livros:", error);
-      Alert.alert("Erro", "Não foi possível carregar sua biblioteca.");
+      console.error("Erro ao carregar dashboard:", error);
     }
   };
 
@@ -97,173 +81,184 @@ export default function Dashboard() {
     setRefreshing(false);
   };
 
-  // Carrega ao montar
-  useEffect(() => {
-    fetchBooks();
-  }, []);
+  useEffect(() => { fetchBooks(); }, []);
 
-  const handleBookPress = async (book: BookWithStatus) => {
+  // --- FILTROS INTELIGENTES (UseMemo) ---
+  const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
+    // Meus Livros: Baixados ou iniciados
+    const my = allBooks.filter(b => b.isDownloaded || b.progress > 0);
+    
+    // Destaques: Apenas ADMINS (Removemos o check de OWNER que causava erro)
+    const featured = allBooks.filter(b => b.owner?.role === 'ADMIN');
+    
+    // Comunidade: O resto (excluindo os que eu já baixei e os de admins)
+    const community = allBooks.filter(b => !b.isDownloaded && b.owner?.role !== 'ADMIN');
+    
+    // Ranking: Ordenado por downloads
+    const ranking = [...allBooks].sort((a, b) => (b.downloadsCount || 0) - (a.downloadsCount || 0)).slice(0, 5);
+
+    return { featuredBooks: featured, rankingBooks: ranking, communityBooks: community, myBooks: my };
+  }, [allBooks]);
+
+
+  // --- GERENCIAMENTO DE DOWNLOADS ---
+  const updateBookState = (id: string, updates: Partial<Book>) => {
+    setAllBooks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+  };
+
+  const handleBookPress = async (book: Book) => {
     if (book.isDownloaded) {
-      // Se já baixou, abre o leitor
       router.push(`/read/${book.id}`);
     } else {
-      // Se não, inicia download
+      // Inicia Download
       try {
-        updateBookStatus(book.id, { isDownloading: true, downloadProgress: 0 });
+        updateBookState(book.id, { isDownloading: true });
         
         await fileManager.downloadBook(book.filePath, book.id, (progress) => {
-           updateBookStatus(book.id, { downloadProgress: progress });
+           updateBookState(book.id, { downloadProgress: progress });
         });
 
-        updateBookStatus(book.id, { isDownloading: false, isDownloaded: true });
-        Alert.alert("Sucesso", "Livro baixado e pronto para leitura offline!");
+        updateBookState(book.id, { isDownloading: false, isDownloaded: true });
+        Alert.alert("Sucesso", "Livro adicionado à sua estante offline!");
       } catch (error) {
-        Alert.alert("Erro", "Falha ao baixar o livro. Verifique sua conexão.");
-        updateBookStatus(book.id, { isDownloading: false });
+        Alert.alert("Erro", "Falha ao baixar o livro.");
+        updateBookState(book.id, { isDownloading: false });
       }
     }
   };
 
-  const handleDelete = async (bookId: string) => {
-    Alert.alert("Remover download", "Deseja remover este livro do dispositivo? O progresso de leitura será mantido.", [
-      { text: "Cancelar", style: "cancel" },
-      { 
-        text: "Remover", 
-        style: "destructive", 
-        onPress: async () => {
-          await fileManager.deleteBook(bookId);
-          updateBookStatus(bookId, { isDownloaded: false });
-        }
-      }
-    ]);
-  };
+  // --- UI HELPERS ---
+  const SectionTitle = ({ title, icon: Icon, color = "#10b981", onPress }: any) => (
+      <View className="px-6 flex-row items-center justify-between mb-4 mt-8">
+          <View className="flex-row items-center gap-2">
+              <Icon size={20} color={color} />
+              <Text className="text-white font-bold text-xl tracking-tight">{title}</Text>
+          </View>
+          {onPress && (
+            <TouchableOpacity onPress={onPress}>
+              <Text className="text-zinc-500 text-xs font-bold uppercase">Ver tudo</Text>
+            </TouchableOpacity>
+          )}
+      </View>
+  );
 
-  const renderBook = ({ item }: { item: BookWithStatus }) => (
-    <View className="bg-zinc-900 mb-4 rounded-xl overflow-hidden flex-row border border-zinc-800">
-      <TouchableOpacity 
-        className="flex-row flex-1"
-        onPress={() => handleBookPress(item)}
+  const BookCardSmall = ({ book }: { book: Book }) => (
+    <TouchableOpacity 
+        onPress={() => handleBookPress(book)}
         activeOpacity={0.7}
-      >
-        {/* Capa do Livro */}
-        <View className="w-24 h-36 bg-zinc-800 items-center justify-center relative">
-          {item.coverUrl ? (
-            <Image 
-              source={{ uri: item.coverUrl }} 
-              className="w-full h-full" 
-              resizeMode="cover" 
-            />
-          ) : (
-            <Text className="text-zinc-500 text-xs text-center p-2 font-bold uppercase">
-              {item.title.substring(0, 20)}
-            </Text>
-          )}
-          
-          {/* Overlay de Download em andamento */}
-          {item.isDownloading && (
-            <View className="absolute inset-0 bg-black/70 items-center justify-center">
-               <Text className="text-white text-xs font-bold mb-1">{Math.round(item.downloadProgress)}%</Text>
-               <ActivityIndicator size="small" color="#10b981" />
-            </View>
-          )}
-        </View>
+        className="mr-4 w-32 group"
+    >
+        <View className="w-32 h-48 rounded-xl bg-zinc-800 overflow-hidden mb-2 relative border border-white/5 shadow-md">
+             {book.coverUrl ? (
+                <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />
+             ) : (
+                <View className="w-full h-full items-center justify-center bg-zinc-800"><BookOpen color="#52525b" /></View>
+             )}
+             
+             {/* Overlay de Download */}
+             {book.isDownloading && (
+                 <View className="absolute inset-0 bg-black/70 items-center justify-center">
+                    <ActivityIndicator color="#10b981" />
+                    <Text className="text-white text-[10px] font-bold mt-1">{Math.round(book.downloadProgress)}%</Text>
+                 </View>
+             )}
 
-        {/* Informações do Livro */}
-        <View className="flex-1 p-4 justify-between">
-          <View>
-            <Text className="text-white font-bold text-lg leading-tight mb-1" numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text className="text-zinc-400 text-sm" numberOfLines={1}>
-              {item.author || 'Autor desconhecido'}
-            </Text>
-          </View>
-
-          <View className="flex-row items-center justify-between mt-2">
-            {/* Barra de Progresso */}
-            <View className="flex-1 mr-4">
-                <View className="flex-row justify-between mb-1">
-                    <Text className="text-zinc-500 text-xs">Progresso</Text>
-                    <Text className="text-emerald-400 text-xs font-bold">{item.progress || 0}%</Text>
+             {/* Indicador de Downloaded */}
+             {!book.isDownloading && !book.isDownloaded && (
+                <View className="absolute top-2 right-2 bg-black/60 p-1.5 rounded-full backdrop-blur-sm">
+                   <Download size={12} color="white" />
                 </View>
-                <View className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <View 
-                        className="h-full bg-emerald-500 rounded-full" 
-                        style={{ width: `${item.progress || 0}%` }} 
-                    />
-                </View>
-            </View>
-
-            {/* Ícone de Ação (Download / Ler) */}
-            <View className="w-8 h-8 rounded-full bg-zinc-800 items-center justify-center">
-                {item.isDownloading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                ) : item.isDownloaded ? (
-                    <BookOpen size={16} color="#10b981" /> // Verde se baixado
-                ) : (
-                    <Download size={16} color="#71717a" /> // Cinza se precisa baixar
-                )}
-            </View>
-          </View>
+             )}
         </View>
-      </TouchableOpacity>
-      
-      {/* Botão de Excluir Download (só aparece se estiver baixado) */}
-      {item.isDownloaded && (
-        <TouchableOpacity 
-            onPress={() => handleDelete(item.id)}
-            className="w-12 bg-red-500/10 items-center justify-center border-l border-zinc-800 active:bg-red-500/20"
-        >
-            <Trash2 size={18} color="#ef4444" />
-        </TouchableOpacity>
-      )}
-    </View>
+        <Text className="text-zinc-200 font-bold text-sm leading-4 mb-0.5" numberOfLines={2}>{book.title}</Text>
+        <Text className="text-zinc-500 text-xs" numberOfLines={1}>{book.author}</Text>
+    </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-zinc-950 px-4 pt-4" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row justify-between items-center mb-6">
-        <View>
-          <Text className="text-zinc-400 text-sm">Olá, {user?.name?.split(' ')[0] || 'Leitor'}</Text>
-          <Text className="text-white text-2xl font-bold">Sua Leitura</Text>
-        </View>
-        <TouchableOpacity 
-          onPress={signOut} 
-          className="p-2 bg-zinc-900 rounded-full border border-zinc-800"
-        >
-            <LogOut size={20} color="#71717a" />
-        </TouchableOpacity>
+    <View className="flex-1 bg-black">
+      <StatusBar barStyle="light-content" />
+      
+      {/* Background Gradient Fixo */}
+      <View className="absolute top-0 left-0 right-0 h-[600px] pointer-events-none">
+        <LinearGradient colors={['#022c22', '#000000']} className="w-full h-full opacity-60" />
       </View>
 
-      {/* Lista de Livros */}
-      <FlatList
-        data={books}
-        keyExtractor={(item) => item.id}
-        renderItem={renderBook}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={onRefresh} 
-              tintColor="#10b981" 
-              colors={["#10b981"]}
-              progressBackgroundColor="#18181b"
+      <SafeAreaView className="flex-1" edges={['top']}>
+        <ScrollView 
+            contentContainerStyle={{ paddingBottom: 100 }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10b981" />}
+        >
+            {/* 1. Header Premium */}
+            <GreetingHeader name={user?.name || null} image={user?.image} />
+
+            {/* 2. Banner de Destaques (Editor's Choice) */}
+            <HeroBanner 
+              books={featuredBooks.length > 0 ? featuredBooks.slice(0, 5) : allBooks.slice(0, 3)} 
+              onPress={handleBookPress} 
             />
-        }
-        ListEmptyComponent={
-            <View className="items-center justify-center mt-20">
-              <BookOpen size={48} color="#27272a" />
-              <Text className="text-zinc-500 text-center mt-4">
-                Você ainda não tem livros na sua conta.
-              </Text>
-              <Text className="text-zinc-600 text-center text-sm mt-2 px-8">
-                Adicione livros através da plataforma web para vê-los aqui.
-              </Text>
+
+            {/* 3. Minha Estante (Livros Baixados/Lendo) */}
+            {myBooks.length > 0 && (
+                <View>
+                    <SectionTitle title="Minha Estante" icon={BookOpen} />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                        {myBooks.map((book) => (
+                             <TouchableOpacity 
+                                key={book.id}
+                                onPress={() => handleBookPress(book)}
+                                className="mr-4 w-28"
+                             >
+                                <View className="h-40 w-full rounded-xl bg-zinc-800 overflow-hidden mb-2 border border-emerald-500/30 shadow-lg shadow-emerald-900/20 relative">
+                                    {book.coverUrl && <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />}
+                                    
+                                    {/* Barra de Progresso */}
+                                    <View className="absolute bottom-0 w-full h-1 bg-zinc-900">
+                                        <View className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${book.progress}%` }} />
+                                    </View>
+                                    
+                                    {book.isDownloaded && (
+                                        <View className="absolute top-1 right-1 bg-emerald-500/90 rounded-full p-0.5">
+                                            <CheckCircle2 size={10} color="white" />
+                                        </View>
+                                    )}
+                                </View>
+                                <Text className="text-zinc-300 text-xs font-medium pl-0.5" numberOfLines={1}>{book.title}</Text>
+                             </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
+
+            {/* 4. Top Downloads */}
+            <View>
+                <SectionTitle title="Mais Baixados" icon={TrendingUp} color="#facc15" />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                    {rankingBooks.map((book, index) => (
+                        <View key={book.id} className="mr-4 relative">
+                            {/* Número do Ranking */}
+                            <Text className="absolute -left-2 -bottom-4 text-[80px] font-black text-white/5 z-0 leading-none">
+                                {index + 1}
+                            </Text>
+                            <BookCardSmall book={book} />
+                        </View>
+                    ))}
+                </ScrollView>
             </View>
-        }
-      />
-    </SafeAreaView>
+
+            {/* 5. Comunidade */}
+            <View>
+                <SectionTitle title="Comunidade" icon={Users} color="#60a5fa" />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                    {communityBooks.map((book) => <BookCardSmall key={book.id} book={book} />)}
+                    {communityBooks.length === 0 && <Text className="text-zinc-500 italic ml-6">Tudo atualizado por aqui.</Text>}
+                </ScrollView>
+            </View>
+
+            <View className="h-8" />
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
