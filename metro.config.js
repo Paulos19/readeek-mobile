@@ -7,4 +7,4 @@ const config = getDefaultConfig(__dirname);
 
 // 1. Adicionamos suporte ao NativeWind apontando para o nosso CSS global
 // 2. O NativeWind v4 transforma esse CSS em estilos nativos para o app
-module.exports = withNativeWind(config, { input: "./src/global.css" });
+module.exports = withNativeWind(config, { input: "./global.css" });
