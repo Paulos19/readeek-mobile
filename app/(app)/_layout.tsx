@@ -1,64 +1,50 @@
 import { Tabs } from 'expo-router';
-import { Home, BookOpen, User } from 'lucide-react-native';
 import { useAuthStore } from 'stores/useAuthStore';
+import { CustomTabBar } from './_components/ui/TabBar/CustomTabBar';
 
 export default function AppLayout() {
   const { token } = useAuthStore();
   
+  // Se não houver token, retorna null para evitar flash de conteúdo protegido
   if (!token) return null; 
 
   return (
     <Tabs
+      // Substituímos a TabBar nativa pelo nosso componente flutuante customizado
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#09090b', 
-          borderTopColor: '#27272a',  
-          height: 64, 
-          paddingBottom: 10,
-          paddingTop: 10,
-        },
-        tabBarActiveTintColor: '#10b981', 
-        tabBarInactiveTintColor: '#71717a', 
-        tabBarShowLabel: false, 
+        // Garante que a TabBar suma quando o teclado abrir (UX padrão Android)
+        tabBarHideOnKeyboard: true,
       }}
     >
-      {/* 1. Dashboard (Home) */}
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: 'Início',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={24} />,
-        }}
+      {/* 1. Rotas Visíveis na TabBar */}
+      <Tabs.Screen 
+        name="dashboard" 
+        options={{ title: 'Início' }} 
+      />
+      
+      <Tabs.Screen 
+        name="library" 
+        options={{ title: 'Biblioteca' }} 
+      />
+      
+      <Tabs.Screen 
+        name="community" 
+        options={{ title: 'Comunidade' }} 
+      />
+      
+      <Tabs.Screen 
+        name="profile" 
+        options={{ title: 'Perfil' }} 
       />
 
-      {/* 2. Biblioteca */}
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: 'Biblioteca',
-          tabBarIcon: ({ color, size }) => <BookOpen color={color} size={24} />,
-        }}
-      />
-
-      {/* 3. Perfil */}
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, size }) => <User color={color} size={24} />,
-        }}
-      />
-
-      {/* 4. Rota do Leitor (CORRIGIDO)
-          Removemos o tabBarButton que causava o conflito.
-          href: null já é suficiente para removê-lo da barra.
-      */}
+      {/* 2. Rota do Leitor (Oculta da TabBar) */}
       <Tabs.Screen
         name="read/[bookId]/index"
         options={{
-          href: null, // Isso remove o item da barra de abas
-          tabBarStyle: { display: 'none' }, // Isso esconde a barra quando você entra na tela
+          href: null, // Remove o botão da navegação
+          tabBarStyle: { display: 'none' }, // Garante que a barra suma ao entrar
         }}
       />
     </Tabs>

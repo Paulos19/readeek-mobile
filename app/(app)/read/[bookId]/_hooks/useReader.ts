@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
-import { useRouter, useNavigation } from 'expo-router';
+import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -8,6 +8,7 @@ import { fileManager } from 'lib/files';
 import { syncProgress, highlightService, Highlight } from 'lib/api';
 import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { useReadingStore } from 'stores/useReadingStore';
 
 export const THEMES = {
     dark: { name: 'Escuro', bg: '#09090b', text: '#e4e4e7', ui: 'dark' },
@@ -15,7 +16,7 @@ export const THEMES = {
     sepia: { name: 'Sépia', bg: '#f6f1d1', text: '#5f4b32', ui: 'light' }
 };
 
-// CORREÇÃO: Verificação de segurança para evitar erro de reduce em undefined
+// Utilitário para achatar a árvore de capítulos (TOC)
 const flattenToc = (items: any[]): any[] => {
     if (!items || !Array.isArray(items)) return [];
     return items.reduce((acc, item) => {
@@ -30,6 +31,11 @@ const flattenToc = (items: any[]): any[] => {
 export function useReader(rawBookId: string | string[]) {
     const router = useRouter();
     const navigation = useNavigation();
+    const params = useLocalSearchParams(); // Captura params da rota (title, author, etc)
+    
+    // Store global para alimentar a TabBar flutuante
+    const { setLastRead, updateProgress: updateGlobalProgress } = useReadingStore();
+
     const webviewRef = useRef<WebView>(null);
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const navigatingRef = useRef(false);
@@ -53,6 +59,7 @@ export function useReader(rawBookId: string | string[]) {
     const [currentTheme, setCurrentTheme] = useState<'dark' | 'light' | 'sepia'>('dark');
     const [selection, setSelection] = useState<{ cfiRange: string; text: string } | null>(null);
 
+    // Oculta a TabBar ao entrar no modo leitura
     useEffect(() => {
         navigation.setOptions({
             tabBarStyle: { display: 'none' },
@@ -60,8 +67,10 @@ export function useReader(rawBookId: string | string[]) {
         });
     }, [navigation]);
 
+    // Sincroniza SharedValue para animações
     useEffect(() => { fontSizeSv.value = fontSize; }, [fontSize]);
 
+    // Carregamento Inicial do Livro
     useEffect(() => {
         if (!bookId) { router.back(); return; }
         const load = async () => {
@@ -91,6 +100,21 @@ export function useReader(rawBookId: string | string[]) {
 
                 const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as any });
                 setBookBase64(base64);
+
+                // --- ATUALIZAÇÃO DA STORE GLOBAL (CORREÇÃO DA CAPA) ---
+                // Verifica fisicamente se o arquivo da capa existe
+                const potentialCoverPath = `${FileSystem.documentDirectory}books/${bookId}/cover.jpg`;
+                const coverInfo = await FileSystem.getInfoAsync(potentialCoverPath);
+                
+                // Se existe, usa o caminho; se não, null (o componente usará fallback)
+                const validCoverUri = coverInfo.exists ? potentialCoverPath : null;
+
+                setLastRead({
+                    id: bookId,
+                    title: (params.title as string) || "Leitura Atual",
+                    progress: progress || 0, 
+                    cover: validCoverUri 
+                });
 
             } catch (error) {
                 console.error("Reader Load Error:", error);
@@ -125,13 +149,20 @@ export function useReader(rawBookId: string | string[]) {
             const data = JSON.parse(event.nativeEvent.data);
             switch(data.type) {
                 case 'LOC':
-                    if (data.percentage) setProgress(data.percentage);
-                    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-                    syncTimeoutRef.current = setTimeout(() => {
-                        syncProgress(bookId, data.cfi, data.percentage);
-                        AsyncStorage.setItem(`@progress:${bookId}`, data.cfi);
-                        if(data.percentage > 0) AsyncStorage.setItem(`@percent:${bookId}`, data.percentage.toString());
-                    }, 1500);
+                    if (data.percentage) {
+                        const pct = data.percentage;
+                        setProgress(pct);
+                        
+                        // Atualiza a barra de progresso na TabBar em tempo real
+                        updateGlobalProgress(bookId, pct * 100);
+
+                        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+                        syncTimeoutRef.current = setTimeout(() => {
+                            syncProgress(bookId, data.cfi, pct);
+                            AsyncStorage.setItem(`@progress:${bookId}`, data.cfi);
+                            if(pct > 0) AsyncStorage.setItem(`@percent:${bookId}`, pct.toString());
+                        }, 1500);
+                    }
                     break;
                 case 'TOC': 
                     setToc(flattenToc(data.toc)); 
