@@ -5,7 +5,6 @@ import { useAuthStore } from 'stores/useAuthStore';
 export default function AppLayout() {
   const { token } = useAuthStore();
   
-  // Proteção simples: se não tiver token, não renderiza nada (o middleware/root layout deve redirecionar)
   if (!token) return null; 
 
   return (
@@ -13,15 +12,15 @@ export default function AppLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#09090b', // zinc-950
-          borderTopColor: '#27272a',  // zinc-800
-          height: 64, // Um pouco mais alto para conforto
+          backgroundColor: '#09090b', 
+          borderTopColor: '#27272a',  
+          height: 64, 
           paddingBottom: 10,
           paddingTop: 10,
         },
-        tabBarActiveTintColor: '#10b981', // emerald-500
-        tabBarInactiveTintColor: '#71717a', // zinc-500
-        tabBarShowLabel: false, // Visual mais limpo, só ícones
+        tabBarActiveTintColor: '#10b981', 
+        tabBarInactiveTintColor: '#71717a', 
+        tabBarShowLabel: false, 
       }}
     >
       {/* 1. Dashboard (Home) */}
@@ -33,7 +32,7 @@ export default function AppLayout() {
         }}
       />
 
-      {/* 2. Biblioteca (Agora existe!) */}
+      {/* 2. Biblioteca */}
       <Tabs.Screen
         name="library"
         options={{
@@ -42,7 +41,7 @@ export default function AppLayout() {
         }}
       />
 
-      {/* 3. Perfil (Agora existe!) */}
+      {/* 3. Perfil */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -51,14 +50,15 @@ export default function AppLayout() {
         }}
       />
 
-      {/* 4. Rota do Leitor (Oculta)
-         Usamos o nome exato que o aviso mostrou: "read/[bookId]/index"
+      {/* 4. Rota do Leitor (CORRIGIDO)
+          Removemos o tabBarButton que causava o conflito.
+          href: null já é suficiente para removê-lo da barra.
       */}
       <Tabs.Screen
         name="read/[bookId]/index"
         options={{
-          href: null, // Isso remove o ícone da barra de abas
-          tabBarStyle: { display: 'none' }, // Garante que a barra suma quando estiver lendo
+          href: null, // Isso remove o item da barra de abas
+          tabBarStyle: { display: 'none' }, // Isso esconde a barra quando você entra na tela
         }}
       />
     </Tabs>

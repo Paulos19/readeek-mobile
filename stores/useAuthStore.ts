@@ -4,16 +4,15 @@ import { router } from 'expo-router';
 import { api } from 'lib/api';
 import { storage } from 'lib/storage';
 
-// 1. ATUALIZAÇÃO DA INTERFACE: Adicionamos os campos que faltavam
 interface User {
   id: string;
   name: string | null;
   email: string;
   image: string | null;
-  role: 'ADMIN' | 'USER' | string; // Melhor tipagem para o role
-  about: string | null;            // Novo campo
-  profileVisibility: 'PUBLIC' | 'PRIVATE'; // Novo campo
-  credits: number;                 // Novo campo (usado para exibir os créditos)
+  role: 'ADMIN' | 'USER' | string;
+  about: string | null;
+  profileVisibility: 'PUBLIC' | 'PRIVATE';
+  credits: number;
 }
 
 interface AuthState {
@@ -23,8 +22,7 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   loadStorageData: () => Promise<void>;
-  // Opcional: Action para atualizar dados do usuário localmente sem refetch
-  updateUser: (data: Partial<User>) => void; 
+  updateUser: (data: Partial<User>) => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -39,7 +37,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       const { user, token } = response.data;
       
+      // Salva tanto o token quanto o objeto do usuário
       await storage.setToken(token);
+      // @ts-ignore - Certifique-se de ter implementado setUser no lib/storage.ts
+      await storage.setUser(user); 
       
       set({ user, token, isLoading: false });
       
@@ -55,6 +56,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await storage.removeToken();
+    // @ts-ignore - Certifique-se de ter implementado removeUser no lib/storage.ts
+    await storage.removeUser(); 
+    
     set({ user: null, token: null });
     router.replace('/login');
   },
@@ -62,26 +66,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loadStorageData: async () => {
     try {
       set({ isLoading: true });
-      const token = await storage.getToken();
       
-      if (token) {
+      // Carrega token e usuário simultaneamente
+      const token = await storage.getToken();
+      // @ts-ignore - Certifique-se de ter implementado getUser no lib/storage.ts
+      const user = await storage.getUser(); 
+      
+      if (token && user) {
+        set({ token, user });
+      } else if (token) {
+        // Fallback: Se tiver token mas não user (caso raro), tenta recuperar da API ou define apenas token
         set({ token });
-        // DICA: Em um app real, aqui você faria um fetch para /api/mobile/auth/me
-        // para pegar os dados atualizados (como créditos e bio) do usuário
-        // ao reabrir o app.
+        // Opcional: chamar api.get('/me') aqui
       }
+      
     } catch (error) {
-      console.error(error);
+      console.error('Erro ao carregar dados do storage:', error);
     } finally {
       set({ isLoading: false });
     }
   },
 
-  // Helper para atualizar a UI imediatamente após editar o perfil
   updateUser: (data) => {
     const currentUser = get().user;
     if (currentUser) {
-      set({ user: { ...currentUser, ...data } });
+      const updatedUser = { ...currentUser, ...data };
+      set({ user: updatedUser });
+      // Opcional: Atualizar o storage local também para persistir a edição
+      // storage.setUser(updatedUser); 
     }
   }
 }));
