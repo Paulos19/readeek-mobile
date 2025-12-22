@@ -12,7 +12,7 @@ import { Logo } from './_components/auth/Logo';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, isLoading } = useAuthStore();
+  const { signIn, isLoading } = useAuthStore()
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -25,7 +25,7 @@ export default function LoginScreen() {
         return;
     }
     try {
-      await login(email, password);
+      await signIn(email, password);
       router.replace('/(app)/dashboard');
     } catch (error: any) {
        // Idealmente, o store ou a API já tratam a mensagem de erro

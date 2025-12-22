@@ -1,89 +1,89 @@
-// app/login.tsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { useAuthStore } from 'stores/useAuthStore';
+import { View, Text, TouchableOpacity, StatusBar, Alert } from 'react-native';
+import { useRouter, Link } from 'expo-router';
+import Animated from 'react-native-reanimated';
+import { Mail, Lock } from 'lucide-react-native';
 
-// Ícones (se tiver lucide-react-native instalado, se não use texto por enquanto)
-// import { Mail, Lock } from 'lucide-react-native';
+import { useAuthStore } from 'stores/useAuthStore';
+import { AuthInput } from './_components/auth/AuthInput';
+import { AuthButton } from './_components/auth/AuthButton';
+import { Logo } from './_components/auth/Logo';
+import { useKeyboardShift } from '_hooks/useKeyboardShift';
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { signIn, isLoading } = useAuthStore();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { signIn, isLoading } = useAuthStore();
+
+  const keyboardStyle = useKeyboardShift();
 
   const handleLogin = async () => {
     if (!email || !password) {
-        Alert.alert("Erro", "Preencha todos os campos");
+        Alert.alert("Campos vazios", "Por favor, preencha e-mail e senha.");
         return;
     }
 
     try {
       await signIn(email, password);
+      router.replace('/(app)/dashboard');
     } catch (error: any) {
-      Alert.alert("Falha no login", error.message);
+      console.error("Login error:", error);
+      Alert.alert("Erro no Login", "Verifique suas credenciais e tente novamente.");
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-zinc-950 justify-center px-6">
-      <StatusBar style="light" />
+    <View className="flex-1 bg-zinc-950">
+      <StatusBar barStyle="light-content" backgroundColor="#09090b" />
       
-      <View className="items-center mb-12">
-        {/* Logo Placeholder */}
-        <View className="w-20 h-20 bg-emerald-500 rounded-2xl items-center justify-center mb-4">
-            <Text className="text-3xl font-bold text-white">R</Text>
-        </View>
-        <Text className="text-3xl font-bold text-white">Readeek</Text>
-        <Text className="text-zinc-400 mt-2 text-base">Sua leitura social, agora no bolso.</Text>
-      </View>
+      <Animated.ScrollView 
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32 }}
+        keyboardShouldPersistTaps="handled"
+        style={[keyboardStyle]}
+      >
+        <Logo />
 
-      <View className="space-y-4">
-        <View>
-            <Text className="text-zinc-300 mb-2 font-medium">E-mail</Text>
-            <TextInput
-            placeholder="seu@email.com"
-            placeholderTextColor="#71717a"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            className="w-full h-14 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-emerald-500"
+        <View className="w-full">
+            <AuthInput
+                icon={Mail}
+                placeholder="E-mail"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                autoCorrect={false}
+            />
+            
+            <AuthInput
+                icon={Lock}
+                placeholder="Senha"
+                isPassword
+                value={password}
+                onChangeText={setPassword}
+            />
+
+            <TouchableOpacity className="self-end mb-8" activeOpacity={0.7}>
+                <Text className="text-zinc-500 text-sm">Esqueceu a senha?</Text>
+            </TouchableOpacity>
+
+            <AuthButton 
+                title="ENTRAR"
+                onPress={handleLogin}
+                isLoading={isLoading}
             />
         </View>
 
-        <View>
-            <Text className="text-zinc-300 mb-2 font-medium">Senha</Text>
-            <TextInput
-            placeholder="Sua senha secreta"
-            placeholderTextColor="#71717a"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            className="w-full h-14 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-emerald-500"
-            />
+        <View className="flex-row justify-center mt-12 items-center">
+            <Text className="text-zinc-500">Ainda não tem conta? </Text>
+            <Link href="/register" asChild>
+                <TouchableOpacity>
+                    <Text className="text-emerald-500 font-bold p-2">Criar agora</Text>
+                </TouchableOpacity>
+            </Link>
         </View>
 
-        <TouchableOpacity 
-            onPress={handleLogin}
-            disabled={isLoading}
-            className={`w-full h-14 bg-emerald-600 rounded-xl items-center justify-center mt-6 shadow-lg shadow-emerald-900/20 ${isLoading ? 'opacity-70' : ''}`}
-        >
-            {isLoading ? (
-                <ActivityIndicator color="#fff" />
-            ) : (
-                <Text className="text-white font-bold text-lg">Entrar</Text>
-            )}
-        </TouchableOpacity>
-      </View>
-
-      <View className="mt-8 flex-row justify-center">
-        <Text className="text-zinc-400">Não tem uma conta? </Text>
-        <TouchableOpacity>
-            <Text className="text-emerald-400 font-bold">Cadastre-se na Web</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+      </Animated.ScrollView>
+    </View>
   );
 }

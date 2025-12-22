@@ -3,13 +3,14 @@ import { View, Text, TouchableOpacity, RefreshControl, ScrollView, StatusBar, Im
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TrendingUp, Users, BookOpen, Download, CheckCircle2 } from 'lucide-react-native';
+import { TrendingUp, Users, BookOpen, Download, CheckCircle2, WifiOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // API & Libs
 import { api, registerDownload } from 'lib/api';
 import { fileManager } from 'lib/files';
 import { useAuthStore } from 'stores/useAuthStore';
+import { useNetworkStatus } from './_hooks/useNetworkStatus';
 
 // Tipos
 import { Book, UserRole } from './_types/book';
@@ -22,27 +23,26 @@ import { BookDetailsModal } from './_components/BookDetailsModal';
 export default function Dashboard() {
   const { user } = useAuthStore();
   const router = useRouter();
+  const { isConnected } = useNetworkStatus();
 
-  // Estados de Dados
+  // Estados
   const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Estados de UI (Modal)
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
   // --- BUSCA DE DADOS ---
   const fetchBooks = async () => {
+    // Se estiver offline, não tenta buscar da API
+    if (!isConnected) return;
+
     try {
-      // 1. Pega livros do Backend
       const response = await api.get('/mobile/books');
       const apiBooks = response.data;
 
       const processedBooks: Book[] = await Promise.all(apiBooks.map(async (book: any) => {
-        // Verifica se existe fisicamente no dispositivo
         const isDownloaded = await fileManager.checkBookExists(book.id);
         
-        // Tratamento seguro do Role
         const rawRole = book.userRole || 'USER';
         const safeRole: UserRole = (rawRole === 'ADMIN' || rawRole === 'USER') ? rawRole : 'USER';
 
@@ -53,19 +53,14 @@ export default function Dashboard() {
             role: safeRole
         };
 
-        // LÓGICA DE PROTEÇÃO DE PROGRESSO
+        // Sync Reverso (Apenas se online e for meu livro)
         let localCfi = null;
-
-        if (book.currentLocation) {
-             localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
-             
-             // Sync Reverso apenas se o livro for meu
-             if (book.userId === user?.id) {
-                if (book.currentLocation !== localCfi) {
-                    await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
-                    localCfi = book.currentLocation;
-                }
-             }
+        if (book.currentLocation && book.userId === user?.id) {
+              localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
+              if (book.currentLocation !== localCfi) {
+                  await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
+                  localCfi = book.currentLocation;
+              }
         }
 
         return {
@@ -93,9 +88,51 @@ export default function Dashboard() {
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchBooks(); }, [user]); 
+  useEffect(() => { fetchBooks(); }, [user, isConnected]); 
 
-  // --- FILTROS INTELIGENTES ---
+  // --- UI OFFLINE (NOVO) ---
+  if (!isConnected) {
+    return (
+        <View className="flex-1 bg-zinc-950">
+            <StatusBar barStyle="light-content" />
+            <SafeAreaView className="flex-1">
+                <ScrollView contentContainerStyle={{flexGrow: 1}}>
+                    <GreetingHeader name={user?.name || 'Leitor'} image={user?.image} />
+                    
+                    <View className="flex-1 px-6 items-center justify-center -mt-20">
+                        <View className="w-full bg-zinc-900/80 border border-zinc-800 p-8 rounded-3xl items-center shadow-lg">
+                            <View className="w-20 h-20 bg-zinc-950 rounded-full items-center justify-center mb-6 border border-zinc-800 shadow-inner">
+                                <WifiOff size={32} color="#ef4444" />
+                            </View>
+                            
+                            <Text className="text-white font-black text-2xl text-center mb-2">
+                                Você está offline
+                            </Text>
+                            <Text className="text-zinc-400 text-center text-base mb-8 leading-6">
+                                O feed, rankings e downloads estão indisponíveis. Mas não se preocupe, seus livros baixados estão prontos.
+                            </Text>
+
+                            <TouchableOpacity 
+                                className="w-full bg-emerald-600 py-4 rounded-xl flex-row items-center justify-center shadow-lg shadow-emerald-900/20"
+                                onPress={() => router.push('/library')}
+                                activeOpacity={0.8}
+                            >
+                                <BookOpen size={20} color="white" style={{ marginRight: 10 }} />
+                                <Text className="text-white font-bold text-lg uppercase tracking-wide">
+                                    Ir para Biblioteca
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
+        </View>
+    );
+  }
+
+  // --- UI ONLINE (NORMAL) ---
+  
+  // Filtros Memoized
   const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
     const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
     const featured = allBooks.filter(b => b.owner?.role === 'ADMIN');
@@ -105,8 +142,6 @@ export default function Dashboard() {
     return { featuredBooks: featured, rankingBooks: ranking, communityBooks: community, myBooks: my };
   }, [allBooks, user]);
 
-
-  // --- AÇÕES ---
   const updateBookState = (id: string, updates: Partial<Book>) => {
     setAllBooks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
     if (selectedBook?.id === id) {
@@ -119,12 +154,9 @@ export default function Dashboard() {
     setModalVisible(true);
   };
 
-  // 2. Ação Principal do Modal (Baixar ou Ler)
   const handleModalAction = async (book: Book) => {
     if (book.isDownloaded) {
       setModalVisible(false);
-      
-      // MUDANÇA: Passando params para informar se o livro tem capa/autor
       router.push({
         pathname: `/read/${book.id}`,
         params: { 
@@ -132,9 +164,7 @@ export default function Dashboard() {
             hasCover: book.coverUrl ? 'true' : 'false'
         }
       });
-      
     } else {
-      // PROCESSO DE DOWNLOAD
       try {
         updateBookState(book.id, { isDownloading: true });
         
@@ -156,7 +186,6 @@ export default function Dashboard() {
     }
   };
 
-  // --- UI HELPERS ---
   const SectionTitle = ({ title, icon: Icon, color = "#10b981", onPress }: any) => (
       <View className="px-6 flex-row items-center justify-between mb-4 mt-8">
           <View className="flex-row items-center gap-2">
