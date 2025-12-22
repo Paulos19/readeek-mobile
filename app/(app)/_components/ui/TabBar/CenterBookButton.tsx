@@ -28,8 +28,9 @@ export const CenterBookButton = ({ onPress }: Props) => {
   return (
     <TouchableOpacity 
       onPress={onPress}
-      activeOpacity={0.8}
-      style={{ position: 'absolute', bottom: 25, alignSelf: 'center' }}
+      activeOpacity={0.9}
+      // Removemos o posicionamento absoluto daqui pois o pai (CustomTabBar) 
+      // agora controla a posição exata para alinhar com a cavidade
     >
       <Animated.View 
         style={[scale, {
