@@ -53,10 +53,7 @@ export default function Dashboard() {
             role: safeRole
         };
 
-        // LÓGICA DE PROTEÇÃO DE PROGRESSO:
-        // Se o livro é meu (userId bate com o logado), tento sincronizar o progresso.
-        // Se é de outro, mostro 0 (a menos que já tenha baixado, aí o backend já deve ter retornado o meu clone).
-        
+        // LÓGICA DE PROTEÇÃO DE PROGRESSO
         let localCfi = null;
 
         if (book.currentLocation) {
@@ -79,7 +76,6 @@ export default function Dashboard() {
           isDownloaded,
           isDownloading: false,
           downloadProgress: 0,
-          // Se não for meu, zero o progresso visualmente
           progress: (book.userId === user?.id) ? (book.progress || 0) : 0, 
           currentLocation: localCfi
         };
@@ -97,21 +93,13 @@ export default function Dashboard() {
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchBooks(); }, [user]); // Recarrega se mudar o utilizador
+  useEffect(() => { fetchBooks(); }, [user]); 
 
   // --- FILTROS INTELIGENTES ---
   const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
-    // Minha Estante: Livros baixados OU livros meus que já iniciei
     const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
-    
-    // Destaques: Apenas ADMINS
     const featured = allBooks.filter(b => b.owner?.role === 'ADMIN');
-    
-    // Comunidade: O resto (excluindo os que já baixei e os de admins)
-    // Nota: filtramos b.userId !== user?.id para não mostrar meus próprios livros na aba comunidade
     const community = allBooks.filter(b => !b.isDownloaded && b.owner?.role !== 'ADMIN' && b.userId !== user?.id);
-    
-    // Ranking: Ordenado por downloads
     const ranking = [...allBooks].sort((a, b) => (b.downloadsCount || 0) - (a.downloadsCount || 0)).slice(0, 5);
 
     return { featuredBooks: featured, rankingBooks: ranking, communityBooks: community, myBooks: my };
@@ -119,8 +107,6 @@ export default function Dashboard() {
 
 
   // --- AÇÕES ---
-  
-  // Atualiza estado local de um livro (barra de progresso, status)
   const updateBookState = (id: string, updates: Partial<Book>) => {
     setAllBooks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
     if (selectedBook?.id === id) {
@@ -128,7 +114,6 @@ export default function Dashboard() {
     }
   };
 
-  // 1. Ao clicar no Card -> Abre Modal
   const handleBookPress = (book: Book) => {
     setSelectedBook(book);
     setModalVisible(true);
@@ -138,29 +123,30 @@ export default function Dashboard() {
   const handleModalAction = async (book: Book) => {
     if (book.isDownloaded) {
       setModalVisible(false);
-      router.push(`/read/${book.id}`);
+      
+      // MUDANÇA: Passando params para informar se o livro tem capa/autor
+      router.push({
+        pathname: `/read/${book.id}`,
+        params: { 
+            author: book.author || '',
+            hasCover: book.coverUrl ? 'true' : 'false'
+        }
+      });
+      
     } else {
       // PROCESSO DE DOWNLOAD
       try {
         updateBookState(book.id, { isDownloading: true });
         
-        // A. Regista na API e obtém o ID CORRETO (pode ser um clone novo ou o mesmo ID)
         const targetBookId = await registerDownload(book.id);
-        
         if (!targetBookId) throw new Error("Falha ao obter ID do livro.");
 
-        // B. Baixa o ficheiro usando o NOVO ID como nome de destino
-        // (A origem continua sendo book.filePath)
         await fileManager.downloadBook(book.filePath, targetBookId, (progress) => {
            updateBookState(book.id, { downloadProgress: progress });
         });
 
         Alert.alert("Sucesso", "Livro adicionado à sua biblioteca!");
         setModalVisible(false);
-
-        // C. REFRESH IMPORTANTE:
-        // Recarregamos a lista para que a API retorne o novo registo (clone) 
-        // e o livro apareça corretamente na "Minha Estante" com o progresso pessoal.
         onRefresh();
 
       } catch (error) {
@@ -238,16 +224,13 @@ export default function Dashboard() {
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10b981" />}
         >
-            {/* 1. Header com Saudação e Avatar Corrigido */}
             <GreetingHeader name={user?.name || null} image={user?.image} />
 
-            {/* 2. Banner de Destaques */}
             <HeroBanner 
               books={featuredBooks.length > 0 ? featuredBooks.slice(0, 5) : allBooks.slice(0, 3)} 
               onPress={handleBookPress} 
             />
 
-            {/* 3. Minha Estante */}
             {myBooks.length > 0 && (
                 <View>
                     <SectionTitle title="Minha Estante" icon={BookOpen} />
@@ -274,7 +257,6 @@ export default function Dashboard() {
                 </View>
             )}
 
-            {/* 4. Top Downloads */}
             <View>
                 <SectionTitle title="Mais Baixados" icon={TrendingUp} color="#facc15" />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
@@ -289,7 +271,6 @@ export default function Dashboard() {
                 </ScrollView>
             </View>
 
-            {/* 5. Comunidade */}
             <View>
                 <SectionTitle title="Comunidade" icon={Users} color="#60a5fa" />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
@@ -302,7 +283,6 @@ export default function Dashboard() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Modal de Detalhes do Livro */}
       <BookDetailsModal 
         visible={modalVisible}
         book={selectedBook}

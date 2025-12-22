@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, ActivityIndicator, StatusBar, Text } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StatusBar, Text, ToastAndroid, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,10 +9,35 @@ import { useReader, THEMES } from './_hooks/useReader';
 import { generateReaderHTML } from './_utils/htmlGenerator';
 import { ReaderMenu } from './_components/ReaderMenu';
 import { HighlightMenu } from './_components/HighlightMenu';
+import { repairBookMetadata } from 'lib/api';
 
 export default function ReaderPage() {
-  const { bookId } = useLocalSearchParams<{ bookId: string }>();
+  // Recebemos author e hasCover para decidir se precisa reparar
+  const { bookId, author, hasCover } = useLocalSearchParams<{ bookId: string, author?: string, hasCover?: string }>();
   const { state, actions, refs, gestures } = useReader(bookId);
+
+  // --- AUTO-REPARO DE METADADOS ---
+  useEffect(() => {
+    const checkAndRepairMetadata = async () => {
+      // Critério: Se não tem capa marcada ou o autor é desconhecido
+      const needsCheck = !hasCover || hasCover === 'false' || !author || author === 'Autor desconhecido';
+
+      if (needsCheck) {
+         const updatedBook = await repairBookMetadata(bookId);
+         
+         if (updatedBook) {
+            if (Platform.OS === 'android') {
+                ToastAndroid.show('Informações do livro atualizadas!', ToastAndroid.LONG);
+            }
+         }
+      }
+    };
+
+    if (bookId) {
+        checkAndRepairMetadata();
+    }
+  }, [bookId, author, hasCover]);
+  // -------------------------------
 
   if (state.isLoading || !state.bookBase64) {
     return (

@@ -4,12 +4,16 @@ import { router } from 'expo-router';
 import { api } from 'lib/api';
 import { storage } from 'lib/storage';
 
+// 1. ATUALIZAÇÃO DA INTERFACE: Adicionamos os campos que faltavam
 interface User {
   id: string;
   name: string | null;
   email: string;
   image: string | null;
-  role: string;
+  role: 'ADMIN' | 'USER' | string; // Melhor tipagem para o role
+  about: string | null;            // Novo campo
+  profileVisibility: 'PUBLIC' | 'PRIVATE'; // Novo campo
+  credits: number;                 // Novo campo (usado para exibir os créditos)
 }
 
 interface AuthState {
@@ -19,9 +23,11 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   loadStorageData: () => Promise<void>;
+  // Opcional: Action para atualizar dados do usuário localmente sem refetch
+  updateUser: (data: Partial<User>) => void; 
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   isLoading: true,
@@ -29,7 +35,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   signIn: async (email, password) => {
     try {
       set({ isLoading: true });
-      // Chama a rota que criamos no Next.js
       const response = await api.post('/mobile/auth/login', { email, password });
       
       const { user, token } = response.data;
@@ -38,7 +43,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       
       set({ user, token, isLoading: false });
       
-      // Navegação após login
       router.replace('/(app)/dashboard'); 
       
     } catch (error: any) {
@@ -61,10 +65,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       const token = await storage.getToken();
       
       if (token) {
-        // Opcional: Validar token chamando uma rota /me no backend
-        // Por enquanto, vamos assumir que se tem token, está logado (offline support)
         set({ token });
-        // Idealmente, cacheamos o User também no SecureStore ou AsyncStore para offline
+        // DICA: Em um app real, aqui você faria um fetch para /api/mobile/auth/me
+        // para pegar os dados atualizados (como créditos e bio) do usuário
+        // ao reabrir o app.
       }
     } catch (error) {
       console.error(error);
@@ -72,4 +76,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: false });
     }
   },
+
+  // Helper para atualizar a UI imediatamente após editar o perfil
+  updateUser: (data) => {
+    const currentUser = get().user;
+    if (currentUser) {
+      set({ user: { ...currentUser, ...data } });
+    }
+  }
 }));
