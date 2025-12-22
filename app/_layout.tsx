@@ -5,6 +5,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import "../global.css"; // Importação do NativeWind/Tailwind
 import { useAuthStore } from 'stores/useAuthStore';
+import 'react-native-reanimated';
 
 export default function RootLayout() {
   const { token, isLoading, loadStorageData } = useAuthStore();

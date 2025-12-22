@@ -1,4 +1,3 @@
-// babel.config.js
 module.exports = function (api) {
   api.cache(true);
   return {
@@ -7,7 +6,9 @@ module.exports = function (api) {
       "nativewind/babel",
     ],
     plugins: [
-      // O plugin do reanimated DEVE ser o último da lista
+      // Se houver outros plugins, eles ficam aqui em cima...
+      
+      // MANTENHA APENAS ESTE (e sempre por último):
       "react-native-reanimated/plugin",
     ],
   };
