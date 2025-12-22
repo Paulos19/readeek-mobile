@@ -22,7 +22,8 @@
         "backgroundColor": "#09090b"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.paulo_s19.readeekmobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,6 +32,12 @@
       "expo-router",
       "expo-web-browser",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "34595154-54dd-499b-a328-13119de1fbc0"
+      }
+    }
   }
 }
