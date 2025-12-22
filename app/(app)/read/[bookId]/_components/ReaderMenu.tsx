@@ -20,7 +20,7 @@ const MINIMIZED_HEIGHT = 180;
 const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.85;
 
 interface Props {
-    visible: boolean;
+    // Prop 'visible' removida pois o controle será no pai
     expanded: boolean;
     activeTab: 'settings' | 'chapters' | 'highlights';
     theme: any;
@@ -39,7 +39,7 @@ interface Props {
 }
 
 export const ReaderMenu = ({
-    visible, expanded, activeTab, theme, fontSize, toc, highlights, progress, title,
+    expanded, activeTab, theme, fontSize, toc, highlights, progress, title,
     onToggleExpand, onSetTab, onChangeFont, onChangeTheme, onSelectChapter, onDeleteHighlight, onClose
 }: Props) => {
     const router = useRouter();
@@ -52,7 +52,6 @@ export const ReaderMenu = ({
         });
     }, [expanded]);
 
-    // Função de clique nos ícones (força expansão)
     const handleTabPress = (tab: 'settings' | 'chapters' | 'highlights') => {
         onSetTab(tab);
         onToggleExpand(true);
@@ -79,7 +78,7 @@ export const ReaderMenu = ({
 
     const animatedStyle = useAnimatedStyle(() => ({ height: height.value }));
 
-    if (!visible) return null;
+    // REMOVIDO: if (!visible) return null; 
 
     // --- RENDERERS ---
     const renderSettings = () => (

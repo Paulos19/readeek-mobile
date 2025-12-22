@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useRouter, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,7 +15,9 @@ export const THEMES = {
     sepia: { name: 'Sépia', bg: '#f6f1d1', text: '#5f4b32', ui: 'light' }
 };
 
+// CORREÇÃO: Verificação de segurança para evitar erro de reduce em undefined
 const flattenToc = (items: any[]): any[] => {
+    if (!items || !Array.isArray(items)) return [];
     return items.reduce((acc, item) => {
         acc.push({ label: item.label, href: item.href });
         if (item.subitems && item.subitems.length > 0) {
@@ -64,7 +66,6 @@ export function useReader(rawBookId: string | string[]) {
         if (!bookId) { router.back(); return; }
         const load = async () => {
             try {
-                // Carrega configs em paralelo
                 const [savedSize, savedTheme, savedCfi, remoteHighlights, bookExists] = await Promise.all([
                     AsyncStorage.getItem('@reader_fontsize'),
                     AsyncStorage.getItem('@reader_theme'),
@@ -113,11 +114,11 @@ export function useReader(rawBookId: string | string[]) {
         });
     }, []);
 
-    const pinchGesture = Gesture.Pinch()
+    const pinchGesture = useMemo(() => Gesture.Pinch()
         .onEnd((e) => {
             const newSize = fontSizeSv.value * e.scale;
             runOnJS(changeFontSize)(newSize);
-        });
+        }), [changeFontSize, fontSizeSv]);
 
     const handleMessage = useCallback((event: any) => {
         try {

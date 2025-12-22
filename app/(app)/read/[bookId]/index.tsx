@@ -29,7 +29,6 @@ export default function ReaderPage() {
     if (bookId) checkAndRepairMetadata();
   }, [bookId, author, hasCover]);
 
-  // Renderiza HTML apenas na carga inicial do conteúdo
   const html = useMemo(() => {
       if (!state.bookBase64) return '';
       return generateReaderHTML({
@@ -63,8 +62,7 @@ export default function ReaderPage() {
           <GestureDetector gesture={gestures.pinchGesture}>
               <View style={{ flex: 1, position: 'relative' }}>
                   
-                  {/* Laterais Invisíveis (Navegação Rápida) */}
-                  {/* Adicionado bg-transparent para garantir captura do toque no Android */}
+                  {/* Laterais Invisíveis */}
                   <Pressable 
                     style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '20%', zIndex: 10, backgroundColor: 'transparent' }}
                     onPress={actions.prevPage}
@@ -74,7 +72,6 @@ export default function ReaderPage() {
                     onPress={actions.nextPage}
                   />
 
-                  {/* WebView Central */}
                   <WebView 
                     ref={refs.webviewRef}
                     originWhitelist={['*']}
@@ -89,27 +86,30 @@ export default function ReaderPage() {
               </View>
           </GestureDetector>
 
-          <ReaderMenu 
-              visible={state.menuVisible}
-              expanded={state.menuExpanded}
-              activeTab={state.activeTab}
-              theme={THEMES[state.currentTheme]}
-              fontSize={state.fontSize}
-              toc={state.toc}
-              highlights={state.highlights}
-              progress={state.progress}
-              title={title || "Livro"}
-              onToggleExpand={(val) => {
-                  if (typeof val === 'boolean') actions.setMenuExpanded(val);
-                  else actions.setMenuExpanded(!state.menuExpanded);
-              }}
-              onSetTab={actions.setActiveTab}
-              onChangeFont={(delta) => actions.changeFontSize(state.fontSize + delta)}
-              onChangeTheme={actions.changeTheme}
-              onSelectChapter={actions.goToChapter}
-              onDeleteHighlight={actions.removeHighlight}
-              onClose={actions.toggleMenu}
-          />
+          {/* RENDERIZAÇÃO CONDICIONAL CORRETA PARA EVITAR WARNINGS */}
+          {state.menuVisible && (
+              <ReaderMenu 
+                  // visible={state.menuVisible} // Prop removida
+                  expanded={state.menuExpanded}
+                  activeTab={state.activeTab}
+                  theme={THEMES[state.currentTheme]}
+                  fontSize={state.fontSize}
+                  toc={state.toc}
+                  highlights={state.highlights}
+                  progress={state.progress}
+                  title={title || "Livro"}
+                  onToggleExpand={(val) => {
+                      if (typeof val === 'boolean') actions.setMenuExpanded(val);
+                      else actions.setMenuExpanded(!state.menuExpanded);
+                  }}
+                  onSetTab={actions.setActiveTab}
+                  onChangeFont={(delta) => actions.changeFontSize(state.fontSize + delta)}
+                  onChangeTheme={actions.changeTheme}
+                  onSelectChapter={actions.goToChapter}
+                  onDeleteHighlight={actions.removeHighlight}
+                  onClose={actions.toggleMenu}
+              />
+          )}
 
           <HighlightMenu 
               visible={!!state.selection} 

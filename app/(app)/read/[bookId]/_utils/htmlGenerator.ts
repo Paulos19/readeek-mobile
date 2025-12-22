@@ -27,15 +27,13 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
             height: 100vh;
             width: 100vw;
             overflow: hidden;
-            -webkit-user-select: none; /* Melhora performance de gestos */
-            user-select: none;
+            /* user-select removido para permitir o destaque de texto */
         }
         #viewer {
             height: 100vh;
             width: 100vw;
             overflow: hidden;
         }
-        /* Estilos para Highlighting */
         .epubjs-hl-yellow { fill: yellow; fill-opacity: 0.3; mix-blend-mode: multiply; }
         .epubjs-hl-red { fill: #ffadad; fill-opacity: 0.3; mix-blend-mode: multiply; }
         .epubjs-hl-blue { fill: #a0c4ff; fill-opacity: 0.3; mix-blend-mode: multiply; }
@@ -45,9 +43,20 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
 <body>
     <div id="viewer"></div>
     <script>
-        // Inicialização Segura
+        function base64ToArrayBuffer(base64) {
+            var binary_string = window.atob(base64);
+            var len = binary_string.length;
+            var bytes = new Uint8Array(len);
+            for (var i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
         try {
-            var book = ePub("data:application/epub+zip;base64,${bookBase64}");
+            var bookData = base64ToArrayBuffer("${bookBase64}");
+            var book = ePub(bookData);
+            
             var rendition = book.renderTo("viewer", {
                 width: "100%",
                 height: "100%",
@@ -72,10 +81,7 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
             rendition.themes.register("custom", themes);
             rendition.themes.select("custom");
 
-            // --- LISTENERS E INTERAÇÕES ---
-
             rendition.on('rendered', function(section) {
-                // Carrega Highlights
                 var currentHighlights = ${JSON.stringify(highlights)};
                 currentHighlights.forEach(function(hl) {
                     try {
@@ -83,8 +89,6 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
                     } catch(e) {}
                 });
 
-                // Listener de Seleção (Texto)
-                // Usa on 'selected' para capturar quando o usuário termina de selecionar
                 rendition.on('selected', function(cfiRange, contents) {
                     rendition.getRange(cfiRange).then(function(range) {
                         if(range) {
@@ -96,43 +100,33 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
                             }));
                         }
                     });
-                    // Limpa a seleção visual nativa para evitar artefatos
                     if(contents && contents.window) {
                         contents.window.getSelection().removeAllRanges();
                     }
                 });
                 
-                // Clique em Marcadores
                 rendition.on('markClicked', function(cfiRange, data, contents) {
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HIGHLIGHT_CLICKED', cfiRange: cfiRange }));
                 });
             });
 
-            // --- GESTÃO DE CLIQUES E MENU (Correção Crítica) ---
             rendition.on('click', function(e, contents) {
                 try {
-                    // Verifica se há seleção de texto ativa
                     var hasSelection = false;
                     if (contents && contents.window) {
                         var sel = contents.window.getSelection();
                         if (sel && sel.toString().length > 0) hasSelection = true;
                     }
 
-                    // Se tiver texto selecionado, não faz nada (deixa o menu de seleção aparecer)
                     if (hasSelection) return;
 
-                    // Bloqueia a navegação padrão do Epub.js
                     e.preventDefault();
-                    
-                    // Envia sinal para o React Native abrir/fechar o menu
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOGGLE_UI' }));
                 } catch(err) {
-                    // Fallback em caso de erro bizarro, tenta abrir o menu
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOGGLE_UI' }));
                 }
             });
 
-            // --- OUTROS EVENTOS ---
             rendition.on('relocated', function(location) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'LOC',
@@ -141,14 +135,16 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
                 }));
             });
 
-            book.loaded.navigation.then(function(toc) {
+            // CORREÇÃO DO SUMÁRIO (TOC)
+            book.loaded.navigation.then(function(nav) {
+                // 'nav' é o objeto Navigation, a lista de capítulos está em 'nav.toc'
+                var tocArray = (nav && nav.toc) ? nav.toc : [];
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'TOC',
-                    toc: toc
+                    toc: tocArray
                 }));
             });
 
-            // --- FUNÇÕES INJETADAS ---
             window.setFontSize = function(size) {
                 rendition.themes.fontSize(size + "%");
             };
