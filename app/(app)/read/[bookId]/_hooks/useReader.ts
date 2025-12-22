@@ -1,15 +1,13 @@
-// app/(app)/read/[bookId]/_hooks/useReader.ts
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useRouter, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
-import * as FileSystem from 'expo-file-system/legacy'; // Importante usar legacy no SDK 54
+import * as FileSystem from 'expo-file-system/legacy';
 import { fileManager } from 'lib/files';
 import { syncProgress, highlightService, Highlight } from 'lib/api';
 import { Gesture } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
 
 export const THEMES = {
     dark: { name: 'Escuro', bg: '#09090b', text: '#e4e4e7', ui: 'dark' },
@@ -17,11 +15,23 @@ export const THEMES = {
     sepia: { name: 'Sépia', bg: '#f6f1d1', text: '#5f4b32', ui: 'light' }
 };
 
+// Função auxiliar para "planar" a árvore de capítulos
+const flattenToc = (items: any[]): any[] => {
+    return items.reduce((acc, item) => {
+        acc.push({ label: item.label, href: item.href });
+        if (item.subitems && item.subitems.length > 0) {
+            acc.push(...flattenToc(item.subitems));
+        }
+        return acc;
+    }, []);
+};
+
 export function useReader(rawBookId: string | string[]) {
     const router = useRouter();
     const navigation = useNavigation();
     const webviewRef = useRef<WebView>(null);
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const navigatingRef = useRef(false);
 
     const bookId = Array.isArray(rawBookId) ? rawBookId[0] : rawBookId;
 
@@ -30,15 +40,19 @@ export function useReader(rawBookId: string | string[]) {
     const [initialLocation, setInitialLocation] = useState<string | null>(null);
     const [highlights, setHighlights] = useState<Highlight[]>([]);
     const [toc, setToc] = useState<any[]>([]);
+    const [progress, setProgress] = useState(0);
 
     const [menuVisible, setMenuVisible] = useState(false);
     const [menuExpanded, setMenuExpanded] = useState(false);
     const [activeTab, setActiveTab] = useState<'settings' | 'chapters' | 'highlights'>('settings');
+    
     const [fontSize, setFontSize] = useState(100);
+    // SharedValue para evitar crash no Reanimated (UI Thread)
+    const fontSizeSv = useSharedValue(100); 
+
     const [currentTheme, setCurrentTheme] = useState<'dark' | 'light' | 'sepia'>('dark');
     const [selection, setSelection] = useState<{ cfiRange: string; text: string } | null>(null);
 
-    // Ocultar Tabs
     useEffect(() => {
         navigation.setOptions({
             tabBarStyle: { display: 'none' },
@@ -46,14 +60,23 @@ export function useReader(rawBookId: string | string[]) {
         });
     }, [navigation]);
 
-    // Load Book
+    // Sincroniza o SharedValue sempre que o State muda
+    useEffect(() => {
+        fontSizeSv.value = fontSize;
+    }, [fontSize]);
+
     useEffect(() => {
         if (!bookId) { router.back(); return; }
         const load = async () => {
             try {
                 const savedSize = await AsyncStorage.getItem('@reader_fontsize');
                 const savedTheme = await AsyncStorage.getItem('@reader_theme');
-                if (savedSize) setFontSize(parseInt(savedSize));
+                
+                if (savedSize) {
+                    const size = parseInt(savedSize);
+                    setFontSize(size);
+                    fontSizeSv.value = size;
+                }
                 if (savedTheme) setCurrentTheme(savedTheme as any);
 
                 const exists = await fileManager.checkBookExists(bookId);
@@ -83,12 +106,10 @@ export function useReader(rawBookId: string | string[]) {
         return () => { if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current); };
     }, [bookId]);
 
-    // Change Font Helper
     const changeFontSize = useCallback(async (newValue: number) => {
         const safeValue = Math.max(50, Math.min(250, Math.round(newValue)));
         setFontSize(prev => {
             if (prev !== safeValue) {
-                // Injeta no WebView
                 webviewRef.current?.injectJavaScript(`window.setFontSize(${safeValue});`);
                 AsyncStorage.setItem('@reader_fontsize', safeValue.toString());
                 return safeValue;
@@ -97,18 +118,14 @@ export function useReader(rawBookId: string | string[]) {
         });
     }, []);
 
-    // Gesto de Pinça (Pinch)
-    const startFontSize = useRef(100);
+    // --- CORREÇÃO DO GESTO DE PINÇA ---
+    // Removemos a lógica do onUpdate que causava o crash e aplicamos apenas no onEnd
     const pinchGesture = Gesture.Pinch()
-        .onStart(() => {
-            startFontSize.current = fontSize;
-        })
-        .onUpdate((e) => {
-            const newSize = startFontSize.current * e.scale;
-            // Debounce visual
-            if (Math.abs(newSize - fontSize) > 5) {
-                runOnJS(changeFontSize)(newSize);
-            }
+        .onEnd((e) => {
+            // Calcula o novo tamanho baseado no valor inicial * escala
+            const newSize = fontSizeSv.value * e.scale;
+            // Executa a mudança de estado na Thread JS de forma segura
+            runOnJS(changeFontSize)(newSize);
         });
 
     const handleMessage = useCallback((event: any) => {
@@ -116,6 +133,7 @@ export function useReader(rawBookId: string | string[]) {
             const data = JSON.parse(event.nativeEvent.data);
             switch(data.type) {
                 case 'LOC':
+                    if (data.percentage) setProgress(data.percentage);
                     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
                     syncTimeoutRef.current = setTimeout(() => {
                         syncProgress(bookId, data.cfi, data.percentage);
@@ -123,7 +141,10 @@ export function useReader(rawBookId: string | string[]) {
                         if(data.percentage > 0) AsyncStorage.setItem(`@percent:${bookId}`, data.percentage.toString());
                     }, 1500);
                     break;
-                case 'TOC': setToc(data.toc); break;
+                case 'TOC': 
+                    // APLICA O FLATTEN AQUI PARA PEGAR SUB-CAPÍTULOS
+                    setToc(flattenToc(data.toc)); 
+                    break;
                 case 'SELECTION': setSelection({ cfiRange: data.cfiRange, text: data.text }); setMenuVisible(false); break;
                 case 'TOGGLE_UI': toggleMenu(); break;
                 case 'HIGHLIGHT_CLICKED': setMenuVisible(true); setMenuExpanded(true); setActiveTab('highlights'); break;
@@ -137,14 +158,22 @@ export function useReader(rawBookId: string | string[]) {
         else { setMenuVisible(true); setMenuExpanded(false); }
     };
 
-    // ... Helpers de tema e highlight mantidos
     const changeTheme = async (theme: 'dark' | 'light' | 'sepia') => {
         setCurrentTheme(theme);
         await AsyncStorage.setItem('@reader_theme', theme);
         webviewRef.current?.injectJavaScript(`window.applyTheme(${JSON.stringify(THEMES[theme])});`);
     };
-    const nextPage = () => webviewRef.current?.injectJavaScript('window.rendition.next()');
-    const prevPage = () => webviewRef.current?.injectJavaScript('window.rendition.prev()');
+
+    const navDebounce = (fn: () => void) => {
+        if (navigatingRef.current) return;
+        navigatingRef.current = true;
+        fn();
+        setTimeout(() => { navigatingRef.current = false; }, 300);
+    };
+
+    const nextPage = () => navDebounce(() => webviewRef.current?.injectJavaScript('window.rendition.next()'));
+    const prevPage = () => navDebounce(() => webviewRef.current?.injectJavaScript('window.rendition.prev()'));
+
     const addHighlight = async (color: string) => {
          if (!selection) return;
          const tempId = Math.random().toString(36).substr(2, 9);
@@ -157,18 +186,20 @@ export function useReader(rawBookId: string | string[]) {
          setSelection(null);
          try { await highlightService.create(bookId, selection.cfiRange, selection.text, color); } catch(e) {}
     };
+
     const removeHighlight = async (cfiRange: string, id: string) => {
         webviewRef.current?.injectJavaScript(`window.rendition.annotations.remove('${cfiRange}', 'highlight');`);
         setHighlights(prev => prev.filter(h => h.id !== id));
         try { await highlightService.delete(id); } catch(e) {}
     };
+
     const goToChapter = (href: string) => {
         webviewRef.current?.injectJavaScript(`window.rendition.display('${href}');`);
         setMenuVisible(false); setMenuExpanded(false);
     };
 
     return {
-        state: { isLoading, bookBase64, initialLocation, highlights, toc, fontSize, currentTheme, selection, menuVisible, menuExpanded, activeTab },
+        state: { isLoading, bookBase64, initialLocation, highlights, toc, fontSize, currentTheme, selection, menuVisible, menuExpanded, activeTab, progress },
         actions: { setMenuVisible, setMenuExpanded, setActiveTab, toggleMenu, changeTheme, changeFontSize, goToChapter, nextPage, prevPage, addHighlight, removeHighlight, handleMessage, setSelection },
         refs: { webviewRef },
         gestures: { pinchGesture }

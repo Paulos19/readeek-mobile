@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StatusBar, Text, ToastAndroid, Platform } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { View, ActivityIndicator, StatusBar, Text, ToastAndroid, Platform, Pressable } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,32 +12,38 @@ import { HighlightMenu } from './_components/HighlightMenu';
 import { repairBookMetadata } from 'lib/api';
 
 export default function ReaderPage() {
-  // Recebemos author e hasCover para decidir se precisa reparar
-  const { bookId, author, hasCover } = useLocalSearchParams<{ bookId: string, author?: string, hasCover?: string }>();
+  // Adicionado 'title' aos parâmetros
+  const { bookId, author, hasCover, title } = useLocalSearchParams<{ bookId: string, author?: string, hasCover?: string, title?: string }>();
   const { state, actions, refs, gestures } = useReader(bookId);
 
   // --- AUTO-REPARO DE METADADOS ---
   useEffect(() => {
     const checkAndRepairMetadata = async () => {
-      // Critério: Se não tem capa marcada ou o autor é desconhecido
       const needsCheck = !hasCover || hasCover === 'false' || !author || author === 'Autor desconhecido';
 
       if (needsCheck) {
          const updatedBook = await repairBookMetadata(bookId);
-         
-         if (updatedBook) {
-            if (Platform.OS === 'android') {
-                ToastAndroid.show('Informações do livro atualizadas!', ToastAndroid.LONG);
-            }
+         if (updatedBook && Platform.OS === 'android') {
+            ToastAndroid.show('Informações do livro atualizadas!', ToastAndroid.LONG);
          }
       }
     };
-
-    if (bookId) {
-        checkAndRepairMetadata();
-    }
+    if (bookId) checkAndRepairMetadata();
   }, [bookId, author, hasCover]);
-  // -------------------------------
+
+  // --- MEMOIZAÇÃO DO HTML ---
+  // CORREÇÃO: Removido 'state.fontSize' das dependências.
+  // A mudança de fonte agora ocorre via injeção de JS, sem recarregar o HTML (que resetava para a capa).
+  const html = useMemo(() => {
+      if (!state.bookBase64) return '';
+      return generateReaderHTML({
+          bookBase64: state.bookBase64,
+          initialLocation: state.initialLocation,
+          highlights: state.highlights,
+          theme: THEMES[state.currentTheme],
+          fontSize: state.fontSize // Usa o tamanho inicial, ajustes subsequentes são via JS
+      });
+  }, [state.bookBase64, state.currentTheme, state.highlights]); // state.fontSize removido intencionalmente
 
   if (state.isLoading || !state.bookBase64) {
     return (
@@ -48,27 +54,28 @@ export default function ReaderPage() {
     );
   }
 
-  const html = generateReaderHTML({
-      bookBase64: state.bookBase64,
-      initialLocation: state.initialLocation,
-      highlights: state.highlights,
-      theme: THEMES[state.currentTheme],
-      fontSize: state.fontSize
-  });
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaView className="flex-1 bg-zinc-950" edges={['top', 'bottom']}>
           <StatusBar 
             hidden={!state.menuVisible} 
             barStyle={state.currentTheme === 'light' || state.currentTheme === 'sepia' ? 'dark-content' : 'light-content'}
-            showHideTransition="fade"
             translucent
             backgroundColor="transparent"
           />
 
           <GestureDetector gesture={gestures.pinchGesture}>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, position: 'relative' }}>
+                  {/* Áreas de Navegação */}
+                  <Pressable 
+                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '20%', zIndex: 10 }}
+                    onPress={actions.prevPage}
+                  />
+                  <Pressable 
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '20%', zIndex: 10 }}
+                    onPress={actions.nextPage}
+                  />
+
                   <WebView 
                     ref={refs.webviewRef}
                     originWhitelist={['*']}
@@ -91,6 +98,8 @@ export default function ReaderPage() {
               fontSize={state.fontSize}
               toc={state.toc}
               highlights={state.highlights}
+              progress={state.progress}
+              title={title || "Livro"} // Passando o título
               onToggleExpand={(val) => {
                   if (typeof val === 'boolean') actions.setMenuExpanded(val);
                   else actions.setMenuExpanded(!state.menuExpanded);
