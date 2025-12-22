@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StatusBar, Text } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useReader, THEMES } from './_hooks/useReader';
 import { generateReaderHTML } from './_utils/htmlGenerator';
@@ -11,11 +12,8 @@ import { HighlightMenu } from './_components/HighlightMenu';
 
 export default function ReaderPage() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
-  
-  // Instanciamos o Hook com toda a lógica
-  const { state, actions, refs } = useReader(bookId);
+  const { state, actions, refs, gestures } = useReader(bookId);
 
-  // Loading State
   if (state.isLoading || !state.bookBase64) {
     return (
         <View className="flex-1 bg-zinc-950 items-center justify-center">
@@ -25,7 +23,6 @@ export default function ReaderPage() {
     );
   }
 
-  // Geração do HTML (Certifique-se que o htmlGenerator.ts foi atualizado conforme passo anterior)
   const html = generateReaderHTML({
       bookBase64: state.bookBase64,
       initialLocation: state.initialLocation,
@@ -35,55 +32,55 @@ export default function ReaderPage() {
   });
 
   return (
-    <SafeAreaView className="flex-1 bg-zinc-950" edges={['top', 'bottom']}>
-      {/* Esconde a StatusBar para leitura imersiva quando o menu está fechado.
-         Animação 'fade' ou 'slide' para suavidade.
-      */}
-      <StatusBar 
-        hidden={!state.menuVisible} 
-        barStyle={state.currentTheme === 'light' || state.currentTheme === 'sepia' ? 'dark-content' : 'light-content'}
-        showHideTransition="fade"
-      />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView className="flex-1 bg-zinc-950" edges={['top', 'bottom']}>
+          {/* StatusBar some quando o menu fecha para imersão total */}
+          <StatusBar 
+            hidden={!state.menuVisible} 
+            barStyle={state.currentTheme === 'light' || state.currentTheme === 'sepia' ? 'dark-content' : 'light-content'}
+            showHideTransition="fade"
+          />
 
-      {/* Componente Core do Leitor */}
-      <WebView 
-        ref={refs.webviewRef}
-        originWhitelist={['*']}
-        source={{ html }}
-        style={{ flex: 1, backgroundColor: THEMES[state.currentTheme].bg }}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        scrollEnabled={false} // Importante: O scroll é interno do HTML/EPUB.js
-        bounces={false}
-        onMessage={actions.handleMessage}
-      />
+          <GestureDetector gesture={gestures.pinchGesture}>
+              <View style={{ flex: 1 }}>
+                  <WebView 
+                    ref={refs.webviewRef}
+                    originWhitelist={['*']}
+                    source={{ html }}
+                    style={{ flex: 1, backgroundColor: THEMES[state.currentTheme].bg }}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    scrollEnabled={false}
+                    bounces={false}
+                    onMessage={actions.handleMessage}
+                  />
+              </View>
+          </GestureDetector>
 
-      {/* Menu Unificado (Header + Bottom Sheet com Abas) */}
-      <ReaderMenu 
-          visible={state.menuVisible}
-          expanded={state.menuExpanded}
-          activeTab={state.activeTab}
-          theme={THEMES[state.currentTheme]}
-          fontSize={state.fontSize}
-          toc={state.toc}
-          highlights={state.highlights}
-          // Ações
-          onToggleExpand={() => actions.setMenuExpanded(!state.menuExpanded)}
-          onSetTab={actions.setActiveTab}
-          onChangeFont={actions.changeFontSize}
-          onChangeTheme={actions.changeTheme}
-          onSelectChapter={actions.goToChapter}
-          onDeleteHighlight={actions.removeHighlight} // Passamos a função direta do hook
-          onClose={actions.toggleMenu}
-      />
+          <ReaderMenu 
+              visible={state.menuVisible}
+              expanded={state.menuExpanded}
+              activeTab={state.activeTab}
+              theme={THEMES[state.currentTheme]}
+              fontSize={state.fontSize}
+              toc={state.toc}
+              highlights={state.highlights}
+              onToggleExpand={() => actions.setMenuExpanded(!state.menuExpanded)}
+              onSetTab={actions.setActiveTab}
+              onChangeFont={(delta) => actions.changeFontSize(state.fontSize + delta)}
+              onChangeTheme={actions.changeTheme}
+              onSelectChapter={actions.goToChapter}
+              onDeleteHighlight={actions.removeHighlight}
+              onClose={actions.toggleMenu}
+          />
 
-      {/* Menu Flutuante de Seleção de Texto (Aparece apenas ao selecionar) */}
-      <HighlightMenu 
-          visible={!!state.selection} 
-          onClose={() => actions.setSelection(null)}
-          onSelectColor={actions.addHighlight}
-      />
+          <HighlightMenu 
+              visible={!!state.selection} 
+              onClose={() => actions.setSelection(null)}
+              onSelectColor={actions.addHighlight}
+          />
 
-    </SafeAreaView>
+        </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }

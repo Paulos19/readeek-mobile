@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Animated, Dimensions, FlatList } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, Dimensions, FlatList } from 'react-native';
 import { 
   ArrowLeft, ChevronUp, ChevronDown, Type, List, Highlighter, 
   Sun, Moon, Plus, Minus, X, Trash2, ChevronRight 
@@ -34,27 +34,40 @@ export const ReaderMenu = ({
 
     if (!visible) return null;
 
-    // --- CONTEÚDO DAS ABAS ---
-
     const renderSettings = () => (
         <View className="p-4 space-y-6">
-            <View className="bg-zinc-800 p-4 rounded-xl flex-row items-center justify-between">
-                <TouchableOpacity onPress={() => onChangeFont(-10)} className="p-2 bg-zinc-700 rounded-lg"><Minus color="#fff" size={20}/></TouchableOpacity>
-                <Text className="text-white font-bold text-xl">{fontSize}%</Text>
-                <TouchableOpacity onPress={() => onChangeFont(10)} className="p-2 bg-zinc-700 rounded-lg"><Plus color="#fff" size={20}/></TouchableOpacity>
+            {/* Controle de Fonte */}
+            <View className="bg-zinc-800/80 p-4 rounded-xl flex-row items-center justify-between border border-white/10 mb-6">
+                <TouchableOpacity 
+                    onPress={() => onChangeFont(-10)} 
+                    className="w-12 h-12 bg-zinc-700/80 rounded-lg items-center justify-center active:bg-zinc-600"
+                >
+                    <Minus color="#fff" size={24}/>
+                </TouchableOpacity>
+                
+                <Text className="text-white font-bold text-2xl tracking-widest">{fontSize}%</Text>
+                
+                <TouchableOpacity 
+                    onPress={() => onChangeFont(10)} 
+                    className="w-12 h-12 bg-zinc-700/80 rounded-lg items-center justify-center active:bg-zinc-600"
+                >
+                    <Plus color="#fff" size={24}/>
+                </TouchableOpacity>
             </View>
 
+            {/* Controle de Tema */}
             <View className="flex-row gap-3">
                 {['light', 'sepia', 'dark'].map((t) => (
                     <TouchableOpacity 
                         key={t} 
                         onPress={() => onChangeTheme(t)}
-                        className={`flex-1 p-4 rounded-xl border-2 items-center ${theme.ui === t || (theme.ui === 'dark' && t === 'dark' && theme.bg === '#09090b') ? 'border-emerald-500 bg-zinc-800' : 'border-zinc-800 bg-zinc-900'}`}
+                        className={`flex-1 py-4 rounded-xl border-2 items-center justify-center ${theme.ui === t || (theme.ui === 'dark' && t === 'dark' && theme.bg === '#09090b') ? 'border-emerald-500 bg-zinc-800/90' : 'border-zinc-800 bg-zinc-900/50'}`}
                     >
-                         {t === 'light' && <Sun color="#fff" size={20} />}
-                         {t === 'dark' && <Moon color="#fff" size={20} />}
-                         {t === 'sepia' && <Type color="#f6f1d1" size={20} />}
-                         <Text className="text-zinc-400 mt-2 capitalize">{t}</Text>
+                         {t === 'light' && <Sun size={20} color={theme.ui === 'light' ? '#10b981' : '#71717a'} />}
+                         {t === 'dark' && <Moon size={20} color={theme.ui === 'dark' ? '#10b981' : '#71717a'} />}
+                         <Text className={`mt-2 font-bold capitalize ${theme.ui === t || (theme.ui === 'dark' && t === 'dark') ? 'text-emerald-500' : 'text-zinc-500'}`}>
+                            {t}
+                         </Text>
                     </TouchableOpacity>
                 ))}
             </View>
@@ -68,9 +81,9 @@ export const ReaderMenu = ({
             renderItem={({ item }) => (
                 <TouchableOpacity 
                     onPress={() => onSelectChapter(item.href)}
-                    className="p-4 border-b border-zinc-800 flex-row justify-between items-center active:bg-zinc-800"
+                    className="p-4 border-b border-white/5 flex-row justify-between items-center active:bg-white/5"
                 >
-                    <Text className="text-zinc-300 font-medium flex-1">{item.label.trim()}</Text>
+                    <Text className="text-zinc-300 font-medium flex-1 text-base">{item.label.trim()}</Text>
                     <ChevronRight color="#52525b" size={16} />
                 </TouchableOpacity>
             )}
@@ -83,16 +96,16 @@ export const ReaderMenu = ({
             data={highlights}
             keyExtractor={(i) => i.id}
             renderItem={({ item }) => (
-                <View className="p-4 border-b border-zinc-800 bg-zinc-900/50">
+                <View className="p-4 border-b border-white/5 bg-zinc-900/30">
                     <View className="flex-row justify-between items-start">
-                        <View className="flex-1 mr-4 pl-2 border-l-4" style={{ borderColor: item.color || '#facc15' }}>
-                            <Text className="text-zinc-300 italic text-sm leading-6">"{item.text.trim()}"</Text>
+                        <View className="flex-1 mr-4 pl-3 border-l-[3px]" style={{ borderColor: item.color || '#facc15' }}>
+                            <Text className="text-zinc-300 italic text-base leading-6">"{item.text.trim()}"</Text>
                         </View>
                         <TouchableOpacity 
                             onPress={() => onDeleteHighlight(item.cfiRange, item.id)}
-                            className="p-2 bg-zinc-800 rounded-lg"
+                            className="p-2 bg-red-500/10 rounded-lg border border-red-500/20"
                         >
-                            <Trash2 color="#ef4444" size={16} />
+                            <Trash2 color="#ef4444" size={18} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -108,58 +121,48 @@ export const ReaderMenu = ({
 
     return (
         <>
-            {/* 1. HEADER (Sempre visível quando menu ativo) */}
-            <View className="absolute top-0 left-0 right-0 h-24 bg-zinc-950/90 flex-row items-end justify-between px-4 pb-4 z-50 animate-in slide-in-from-top-4">
-                <TouchableOpacity onPress={() => router.back()} className="p-2">
-                    <ArrowLeft color="white" size={24} />
+            {/* HEADER */}
+            <View className="absolute top-0 left-0 right-0 h-24 bg-zinc-950/90 flex-row items-end justify-between px-4 pb-4 z-50 border-b border-white/5 backdrop-blur-md">
+                <TouchableOpacity onPress={() => router.back()} className="p-2 bg-zinc-800/50 rounded-full">
+                    <ArrowLeft color="white" size={20} />
                 </TouchableOpacity>
-                <Text className="text-zinc-400 text-sm font-medium pb-1" numberOfLines={1} style={{ maxWidth: 200 }}>
-                    Opções de Leitura
-                </Text>
-                <TouchableOpacity onPress={onClose} className="p-2">
-                    <X color="white" size={24} />
+                <Text className="text-zinc-400 text-sm font-medium pb-2">Menu de Leitura</Text>
+                <TouchableOpacity onPress={onClose} className="p-2 bg-zinc-800/50 rounded-full">
+                    <X color="white" size={20} />
                 </TouchableOpacity>
             </View>
 
-            {/* 2. BOTTOM SHEET UNIFICADO */}
+            {/* BOTTOM SHEET */}
             <View 
-                className={`absolute bottom-0 left-0 right-0 bg-zinc-900 rounded-t-3xl shadow-2xl z-50 transition-all duration-300 ease-in-out border-t border-zinc-800`}
-                style={{ 
-                    height: expanded ? SCREEN_HEIGHT * 0.75 : 180, // Altura dinâmica
-                }}
+                className={`absolute bottom-0 left-0 right-0 bg-zinc-900/95 rounded-t-3xl shadow-2xl z-50 border-t border-white/10 backdrop-blur-xl`}
+                style={{ height: expanded ? SCREEN_HEIGHT * 0.75 : 180 }}
             >
-                {/* Handle / Gatilho de Arrastar */}
+                {/* Handle */}
                 <TouchableOpacity 
                     onPress={onToggleExpand}
                     activeOpacity={0.9}
-                    className="w-full h-8 items-center justify-center border-b border-zinc-800/50"
+                    className="w-full h-8 items-center justify-center border-b border-white/5"
                 >
-                    <View className="w-12 h-1.5 bg-zinc-700 rounded-full mb-1" />
+                    <View className="w-12 h-1 bg-zinc-600/50 rounded-full mb-1" />
                     {expanded ? <ChevronDown size={14} color="#71717a" /> : <ChevronUp size={14} color="#71717a" />}
                 </TouchableOpacity>
 
-                {/* Área de Controle Principal (Sempre visível) */}
+                {/* Menu Minimizado */}
                 {!expanded && (
                     <View className="p-6 flex-row justify-around items-center">
                         <TouchableOpacity onPress={() => { onSetTab('settings'); onToggleExpand(); }} className="items-center gap-2">
-                            <View className="w-12 h-12 bg-zinc-800 rounded-full items-center justify-center">
-                                <Type color="#e4e4e7" size={24} />
-                            </View>
-                            <Text className="text-zinc-400 text-xs">Ajustes</Text>
+                            <View className="w-14 h-14 bg-zinc-800/80 rounded-2xl items-center justify-center border border-white/5 active:bg-zinc-700"><Type color="#e4e4e7" size={24} /></View>
+                            <Text className="text-zinc-500 text-xs font-bold">Ajustes</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity onPress={() => { onSetTab('chapters'); onToggleExpand(); }} className="items-center gap-2">
-                            <View className="w-12 h-12 bg-zinc-800 rounded-full items-center justify-center">
-                                <List color="#e4e4e7" size={24} />
-                            </View>
-                            <Text className="text-zinc-400 text-xs">Capítulos</Text>
+                            <View className="w-14 h-14 bg-zinc-800/80 rounded-2xl items-center justify-center border border-white/5 active:bg-zinc-700"><List color="#e4e4e7" size={24} /></View>
+                            <Text className="text-zinc-500 text-xs font-bold">Capítulos</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity onPress={() => { onSetTab('highlights'); onToggleExpand(); }} className="items-center gap-2">
-                            <View className="w-12 h-12 bg-zinc-800 rounded-full items-center justify-center">
-                                <Highlighter color="#e4e4e7" size={24} />
-                            </View>
-                            <Text className="text-zinc-400 text-xs">Destaques</Text>
+                            <View className="w-14 h-14 bg-zinc-800/80 rounded-2xl items-center justify-center border border-white/5 active:bg-zinc-700"><Highlighter color="#e4e4e7" size={24} /></View>
+                            <Text className="text-zinc-500 text-xs font-bold">Destaques</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -167,8 +170,7 @@ export const ReaderMenu = ({
                 {/* Conteúdo Expandido */}
                 {expanded && (
                     <View className="flex-1">
-                        {/* Tab Bar Interna */}
-                        <View className="flex-row border-b border-zinc-800">
+                        <View className="flex-row border-b border-white/5">
                             {[
                                 { id: 'settings', label: 'Ajustes', icon: Type },
                                 { id: 'chapters', label: 'Capítulos', icon: List },
@@ -177,7 +179,7 @@ export const ReaderMenu = ({
                                 <TouchableOpacity 
                                     key={tab.id}
                                     onPress={() => onSetTab(tab.id as any)}
-                                    className={`flex-1 flex-row items-center justify-center py-4 gap-2 ${activeTab === tab.id ? 'border-b-2 border-emerald-500 bg-zinc-800/50' : ''}`}
+                                    className={`flex-1 flex-row items-center justify-center py-4 gap-2 ${activeTab === tab.id ? 'border-b-2 border-emerald-500 bg-white/5' : ''}`}
                                 >
                                     <tab.icon size={16} color={activeTab === tab.id ? '#10b981' : '#71717a'} />
                                     <Text className={`${activeTab === tab.id ? 'text-emerald-500 font-bold' : 'text-zinc-500'}`}>
@@ -187,8 +189,7 @@ export const ReaderMenu = ({
                             ))}
                         </View>
 
-                        {/* Corpo da Aba */}
-                        <View className="flex-1 bg-zinc-950">
+                        <View className="flex-1 bg-zinc-950/30">
                             {activeTab === 'settings' && renderSettings()}
                             {activeTab === 'chapters' && renderChapters()}
                             {activeTab === 'highlights' && renderHighlights()}
