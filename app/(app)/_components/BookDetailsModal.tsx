@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, Text, Modal, Image, TouchableOpacity, ScrollView } from 'react-native';
-import { X, Download, BookOpen } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, Modal, TouchableOpacity, Image, ScrollView, Dimensions } from 'react-native';
+import { BlurView } from 'expo-blur'; // Se não tiver expo-blur, use View com opacidade
+import { X, User, Download, BookOpen, Clock, FileText } from 'lucide-react-native';
 import { Book } from '../_types/book';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Props {
   visible: boolean;
@@ -16,81 +16,135 @@ export const BookDetailsModal = ({ visible, book, onClose, onAction }: Props) =>
   if (!book) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 justify-center items-center bg-black/80">
-        <BlurView intensity={40} tint="dark" className="absolute inset-0" />
-        
-        <View className="bg-zinc-900 w-[85%] max-h-[80%] rounded-[32px] overflow-hidden border border-white/10 shadow-2xl shadow-black flex-col">
-          
-          <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
-            {/* Header com Capa */}
-            <View className="h-80 w-full relative">
-                {book.coverUrl ? (
-                    <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />
-                ) : (
-                    <View className="w-full h-full bg-zinc-800 items-center justify-center"><BookOpen size={60} color="#52525b" /></View>
-                )}
-                <LinearGradient colors={['transparent', '#18181b']} className="absolute bottom-0 left-0 right-0 h-48" />
-                
-                <TouchableOpacity onPress={onClose} className="absolute top-4 right-4 bg-black/40 p-2 rounded-full border border-white/10">
-                    <X color="white" size={20} />
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View className="flex-1 justify-end">
+        {/* Fundo Escuro com Blur */}
+        <TouchableOpacity 
+            activeOpacity={1} 
+            onPress={onClose}
+            className="absolute inset-0 bg-black/80"
+        />
+
+        {/* Conteúdo do Modal */}
+        <View className="bg-zinc-900 rounded-t-[32px] border-t border-zinc-800 h-[85%] overflow-hidden relative">
+            
+            {/* Imagem de Fundo (Blur) */}
+            <Image 
+                source={{ uri: book.coverUrl || undefined }} 
+                className="absolute top-0 left-0 right-0 h-64 opacity-20"
+                blurRadius={10}
+            />
+            <LinearGradient
+                colors={['transparent', '#18181b']}
+                className="absolute top-0 left-0 right-0 h-64"
+            />
+
+            {/* Header com Botão Fechar */}
+            <View className="flex-row justify-end p-6 z-10">
+                <TouchableOpacity onPress={onClose} className="bg-black/40 p-2 rounded-full">
+                    <X color="#fff" size={20} />
                 </TouchableOpacity>
             </View>
 
-            {/* Conteúdo */}
-            <View className="px-6 pb-8 -mt-10 bg-zinc-900">
-                <Text className="text-white font-bold text-3xl text-center leading-8 mb-2 drop-shadow-md">{book.title}</Text>
-                <Text className="text-zinc-400 text-base text-center font-medium mb-6">{book.author || 'Autor Desconhecido'}</Text>
-
-                {/* Status Grid */}
-                <View className="flex-row justify-center gap-3 mb-8">
-                    <View className="bg-zinc-800/50 px-4 py-3 rounded-2xl items-center border border-white/5 min-w-[90px]">
-                        <Text className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Progresso</Text>
-                        <Text className="text-emerald-400 font-bold text-lg">{book.progress}%</Text>
+            <ScrollView className="flex-1 px-6 -mt-10" showsVerticalScrollIndicator={false}>
+                {/* Capa e Título */}
+                <View className="flex-row gap-6 mb-8 items-end">
+                    <View className="shadow-2xl shadow-black">
+                        <Image 
+                            source={{ uri: book.coverUrl || undefined }} 
+                            className="w-32 h-48 rounded-xl border border-white/10 bg-zinc-800"
+                            resizeMode="cover"
+                        />
                     </View>
-                    <View className="bg-zinc-800/50 px-4 py-3 rounded-2xl items-center border border-white/5 min-w-[90px]">
-                        <Text className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Status</Text>
-                        <Text className="text-white font-bold text-lg">{book.isDownloaded ? 'No Device' : 'Na Nuvem'}</Text>
+                    <View className="flex-1 pb-2">
+                        <Text className="text-white font-bold text-2xl mb-1 leading-7">
+                            {book.title}
+                        </Text>
+                        <Text className="text-zinc-400 text-base font-medium">
+                            {book.author || "Autor Desconhecido"}
+                        </Text>
+                        
+                        {/* Tags / Stats */}
+                        <View className="flex-row flex-wrap gap-2 mt-3">
+                            {(book.downloadsCount || 0) > 0 && (
+                                <View className="bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20 flex-row items-center gap-1">
+                                    <Download size={10} color="#10b981" />
+                                    <Text className="text-emerald-500 text-[10px] font-bold">
+                                        {book.downloadsCount} Downloads
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
                 </View>
 
-                {/* Descrição */}
-                <View className="bg-zinc-800/30 p-4 rounded-2xl mb-8">
-                    <Text className="text-zinc-500 text-xs font-bold uppercase mb-2">Sobre a Obra</Text>
-                    <Text className="text-zinc-300 text-sm leading-6">
-                        {book.description || "Nenhuma descrição fornecida para este livro. Baixe agora para descobrir este conteúdo."}
+                {/* Seção: Enviado Por */}
+                <View className="bg-zinc-800/50 p-4 rounded-2xl mb-6 border border-zinc-700/50 flex-row items-center justify-between">
+                    <View className="flex-row items-center gap-3">
+                        <View className="w-10 h-10 rounded-full bg-zinc-700 items-center justify-center overflow-hidden border border-zinc-600">
+                            {book.owner?.image ? (
+                                <Image source={{ uri: book.owner.image }} className="w-full h-full" />
+                            ) : (
+                                <User size={20} color="#a1a1aa" />
+                            )}
+                        </View>
+                        <View>
+                            <Text className="text-zinc-500 text-xs uppercase font-bold tracking-wider">Enviado por</Text>
+                            <Text className="text-white font-semibold text-sm">
+                                {book.owner?.name || "Anônimo"}
+                            </Text>
+                        </View>
+                    </View>
+                    <View className="bg-zinc-950 px-3 py-1.5 rounded-full border border-zinc-800">
+                        <Text className="text-zinc-400 text-[10px] font-bold">
+                            {book.owner?.role === 'ADMIN' ? 'ADMINISTRADOR' : 'MEMBRO'}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Sinopse / Descrição */}
+                <View className="mb-24">
+                    <Text className="text-white font-bold text-lg mb-3">Sobre o livro</Text>
+                    <Text className="text-zinc-400 text-base leading-6">
+                        {book.description || "Este livro não possui uma descrição disponível. Baixe para descobrir o conteúdo!"}
                     </Text>
                 </View>
+            </ScrollView>
 
-                {/* Botão de Ação */}
+            {/* Footer Fixo com Ação */}
+            <View className="absolute bottom-0 left-0 right-0 p-6 bg-zinc-900 border-t border-zinc-800">
                 <TouchableOpacity 
                     onPress={() => onAction(book)}
                     activeOpacity={0.8}
-                    disabled={book.isDownloading}
-                    className={`w-full py-4 rounded-2xl flex-row items-center justify-center gap-3 shadow-lg ${
-                        book.isDownloaded ? 'bg-zinc-800 border border-emerald-500/30' : 'bg-emerald-600 shadow-emerald-500/20'
+                    className={`w-full py-4 rounded-xl flex-row items-center justify-center gap-2 shadow-lg ${
+                        book.isDownloaded ? 'bg-zinc-800 border border-zinc-700' : 'bg-emerald-600'
                     }`}
                 >
                     {book.isDownloaded ? (
                         <>
-                            <BookOpen color="#10b981" fill="#10b981" size={20} />
-                            <Text className="text-emerald-500 font-bold text-lg">Continuar Lendo</Text>
+                            <BookOpen size={20} color="white" />
+                            <Text className="text-white font-bold text-lg">Ler Agora</Text>
                         </>
                     ) : (
                         <>
                             {book.isDownloading ? (
-                                <Text className="text-white font-bold text-lg opacity-80">Baixando...</Text>
+                                <Text className="text-white font-bold text-lg">Baixando...</Text>
                             ) : (
                                 <>
-                                    <Download color="white" size={20} />
-                                    <Text className="text-white font-bold text-lg">Baixar para Biblioteca</Text>
+                                    <Download size={20} color="white" />
+                                    <Text className="text-white font-bold text-lg">Baixar Livro</Text>
                                 </>
                             )}
                         </>
                     )}
                 </TouchableOpacity>
             </View>
-          </ScrollView>
+
         </View>
       </View>
     </Modal>

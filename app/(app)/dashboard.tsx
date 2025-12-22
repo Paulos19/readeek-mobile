@@ -3,11 +3,11 @@ import { View, Text, TouchableOpacity, RefreshControl, ScrollView, StatusBar, Im
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LogOut, Crown, TrendingUp, Users, BookOpen, Download, CheckCircle2 } from 'lucide-react-native';
+import { TrendingUp, Users, BookOpen, Download, CheckCircle2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // API & Libs
-import { api, registerDownload } from 'lib/api'; // <--- Importando registerDownload
+import { api, registerDownload } from 'lib/api';
 import { fileManager } from 'lib/files';
 import { useAuthStore } from 'stores/useAuthStore';
 
@@ -17,21 +17,29 @@ import { Book, UserRole } from './_types/book';
 // Componentes UI
 import { HeroBanner } from './_components/HeroBanner';
 import { GreetingHeader } from './_components/GreetingHeader';
+import { BookDetailsModal } from './_components/BookDetailsModal';
 
 export default function Dashboard() {
-  const { user, signOut } = useAuthStore();
+  const { user } = useAuthStore();
   const router = useRouter();
 
+  // Estados de Dados
   const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Estados de UI (Modal)
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   // --- BUSCA DE DADOS ---
   const fetchBooks = async () => {
     try {
+      // 1. Pega livros do Backend
       const response = await api.get('/mobile/books');
       const apiBooks = response.data;
 
       const processedBooks: Book[] = await Promise.all(apiBooks.map(async (book: any) => {
+        // Verifica se existe fisicamente no dispositivo
         const isDownloaded = await fileManager.checkBookExists(book.id);
         
         // Tratamento seguro do Role
@@ -45,23 +53,35 @@ export default function Dashboard() {
             role: safeRole
         };
 
-        // Sync Reverso
+        // LÓGICA DE PROTEÇÃO DE PROGRESSO:
+        // Se o livro é meu (userId bate com o logado), tento sincronizar o progresso.
+        // Se é de outro, mostro 0 (a menos que já tenha baixado, aí o backend já deve ter retornado o meu clone).
+        
+        let localCfi = null;
+
         if (book.currentLocation) {
-             const localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
-             if (book.currentLocation !== localCfi) {
-                 await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
+             localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
+             
+             // Sync Reverso apenas se o livro for meu
+             if (book.userId === user?.id) {
+                if (book.currentLocation !== localCfi) {
+                    await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
+                    localCfi = book.currentLocation;
+                }
              }
         }
 
         return {
           ...book,
           owner: mockOwner,
-          // Agora usamos o valor real do banco
           downloadsCount: book.downloadsCount || 0,
+          description: book.description || null,
           isDownloaded,
           isDownloading: false,
           downloadProgress: 0,
-          progress: book.progress || 0
+          // Se não for meu, zero o progresso visualmente
+          progress: (book.userId === user?.id) ? (book.progress || 0) : 0, 
+          currentLocation: localCfi
         };
       }));
 
@@ -77,52 +97,74 @@ export default function Dashboard() {
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchBooks(); }, []);
+  useEffect(() => { fetchBooks(); }, [user]); // Recarrega se mudar o utilizador
 
-  // --- FILTROS ---
+  // --- FILTROS INTELIGENTES ---
   const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
-    const my = allBooks.filter(b => b.isDownloaded || b.progress > 0);
+    // Minha Estante: Livros baixados OU livros meus que já iniciei
+    const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
+    
+    // Destaques: Apenas ADMINS
     const featured = allBooks.filter(b => b.owner?.role === 'ADMIN');
-    const community = allBooks.filter(b => !b.isDownloaded && b.owner?.role !== 'ADMIN');
-    // Ranking real baseado no downloadsCount
+    
+    // Comunidade: O resto (excluindo os que já baixei e os de admins)
+    // Nota: filtramos b.userId !== user?.id para não mostrar meus próprios livros na aba comunidade
+    const community = allBooks.filter(b => !b.isDownloaded && b.owner?.role !== 'ADMIN' && b.userId !== user?.id);
+    
+    // Ranking: Ordenado por downloads
     const ranking = [...allBooks].sort((a, b) => (b.downloadsCount || 0) - (a.downloadsCount || 0)).slice(0, 5);
 
     return { featuredBooks: featured, rankingBooks: ranking, communityBooks: community, myBooks: my };
-  }, [allBooks]);
+  }, [allBooks, user]);
 
 
   // --- AÇÕES ---
+  
+  // Atualiza estado local de um livro (barra de progresso, status)
   const updateBookState = (id: string, updates: Partial<Book>) => {
     setAllBooks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+    if (selectedBook?.id === id) {
+        setSelectedBook(prev => prev ? { ...prev, ...updates } : null);
+    }
   };
 
-  const handleBookPress = async (book: Book) => {
+  // 1. Ao clicar no Card -> Abre Modal
+  const handleBookPress = (book: Book) => {
+    setSelectedBook(book);
+    setModalVisible(true);
+  };
+
+  // 2. Ação Principal do Modal (Baixar ou Ler)
+  const handleModalAction = async (book: Book) => {
     if (book.isDownloaded) {
+      setModalVisible(false);
       router.push(`/read/${book.id}`);
     } else {
-      // INÍCIO DO PROCESSO DE DOWNLOAD
+      // PROCESSO DE DOWNLOAD
       try {
         updateBookState(book.id, { isDownloading: true });
         
-        // 1. Incrementa contador no backend
-        const newCount = await registerDownload(book.id);
+        // A. Regista na API e obtém o ID CORRETO (pode ser um clone novo ou o mesmo ID)
+        const targetBookId = await registerDownload(book.id);
         
-        // 2. Baixa o arquivo físico
-        await fileManager.downloadBook(book.filePath, book.id, (progress) => {
+        if (!targetBookId) throw new Error("Falha ao obter ID do livro.");
+
+        // B. Baixa o ficheiro usando o NOVO ID como nome de destino
+        // (A origem continua sendo book.filePath)
+        await fileManager.downloadBook(book.filePath, targetBookId, (progress) => {
            updateBookState(book.id, { downloadProgress: progress });
         });
 
-        // 3. Finaliza
-        updateBookState(book.id, { 
-            isDownloading: false, 
-            isDownloaded: true,
-            // Atualiza o contador na UI localmente se a API retornou novo valor
-            downloadsCount: newCount !== null ? newCount : (book.downloadsCount || 0) + 1
-        });
-        
-        Alert.alert("Sucesso", "Livro adicionado à sua estante!");
+        Alert.alert("Sucesso", "Livro adicionado à sua biblioteca!");
+        setModalVisible(false);
+
+        // C. REFRESH IMPORTANTE:
+        // Recarregamos a lista para que a API retorne o novo registo (clone) 
+        // e o livro apareça corretamente na "Minha Estante" com o progresso pessoal.
+        onRefresh();
+
       } catch (error) {
-        Alert.alert("Erro", "Falha ao baixar o livro.");
+        Alert.alert("Erro", "Falha ao baixar o livro. Verifique sua conexão.");
         updateBookState(book.id, { isDownloading: false });
       }
     }
@@ -173,7 +215,6 @@ export default function Dashboard() {
         
         <View className="flex-row items-center justify-between">
             <Text className="text-zinc-500 text-xs flex-1" numberOfLines={1}>{book.author}</Text>
-            {/* Exibe contador de downloads se houver */}
             {(book.downloadsCount ?? 0) > 0 && (
                 <View className="flex-row items-center gap-0.5 ml-1">
                     <Download size={8} color="#71717a" />
@@ -197,13 +238,16 @@ export default function Dashboard() {
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10b981" />}
         >
+            {/* 1. Header com Saudação e Avatar Corrigido */}
             <GreetingHeader name={user?.name || null} image={user?.image} />
 
+            {/* 2. Banner de Destaques */}
             <HeroBanner 
               books={featuredBooks.length > 0 ? featuredBooks.slice(0, 5) : allBooks.slice(0, 3)} 
               onPress={handleBookPress} 
             />
 
+            {/* 3. Minha Estante */}
             {myBooks.length > 0 && (
                 <View>
                     <SectionTitle title="Minha Estante" icon={BookOpen} />
@@ -212,9 +256,11 @@ export default function Dashboard() {
                              <TouchableOpacity key={book.id} onPress={() => handleBookPress(book)} className="mr-4 w-28">
                                 <View className="h-40 w-full rounded-xl bg-zinc-800 overflow-hidden mb-2 border border-emerald-500/30 shadow-lg shadow-emerald-900/20 relative">
                                     {book.coverUrl && <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />}
+                                    
                                     <View className="absolute bottom-0 w-full h-1 bg-zinc-900">
                                         <View className="h-full bg-emerald-500" style={{ width: `${book.progress}%` }} />
                                     </View>
+                                    
                                     {book.isDownloaded && (
                                         <View className="absolute top-1 right-1 bg-emerald-500/90 rounded-full p-0.5">
                                             <CheckCircle2 size={10} color="white" />
@@ -228,6 +274,7 @@ export default function Dashboard() {
                 </View>
             )}
 
+            {/* 4. Top Downloads */}
             <View>
                 <SectionTitle title="Mais Baixados" icon={TrendingUp} color="#facc15" />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
@@ -242,6 +289,7 @@ export default function Dashboard() {
                 </ScrollView>
             </View>
 
+            {/* 5. Comunidade */}
             <View>
                 <SectionTitle title="Comunidade" icon={Users} color="#60a5fa" />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
@@ -253,6 +301,14 @@ export default function Dashboard() {
             <View className="h-8" />
         </ScrollView>
       </SafeAreaView>
+
+      {/* Modal de Detalhes do Livro */}
+      <BookDetailsModal 
+        visible={modalVisible}
+        book={selectedBook}
+        onClose={() => setModalVisible(false)}
+        onAction={handleModalAction}
+      />
     </View>
   );
 }

@@ -62,7 +62,8 @@ export const highlightService = {
 export const registerDownload = async (bookId: string) => {
     try {
         const response = await api.post('/mobile/books/download', { bookId });
-        return response.data.newCount; // Retorna o novo número se precisar atualizar a UI
+        // Retorna o ID do livro que deve ser usado no sistema de arquivos
+        return response.data.newBookId; 
     } catch (error) {
         console.error("[API] Falha ao registrar download", error);
         return null;

@@ -1,76 +1,66 @@
 import { Tabs } from 'expo-router';
-import { View, Platform } from 'react-native';
-import { Home, User, BookOpen } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Home, BookOpen, User } from 'lucide-react-native';
+import { useAuthStore } from 'stores/useAuthStore';
 
 export default function AppLayout() {
-  const insets = useSafeAreaInsets();
+  const { token } = useAuthStore();
+  
+  // Proteção simples: se não tiver token, não renderiza nada (o middleware/root layout deve redirecionar)
+  if (!token) return null; 
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false, // Clean look, sem texto
-        tabBarActiveTintColor: '#10b981', // Emerald-500
-        tabBarInactiveTintColor: '#52525b', // Zinc-600
         tabBarStyle: {
-          position: 'absolute',
-          bottom: Platform.OS === 'ios' ? 24 : 16,
-          left: 20,
-          right: 20,
-          height: 64,
-          borderRadius: 32,
-          backgroundColor: '#18181b', // Zinc-900
-          borderTopWidth: 0,
-          borderWidth: 1,
-          borderColor: '#27272a', // Zinc-800
-          elevation: 10, // Sombra Android
-          shadowColor: '#000', // Sombra iOS
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 10,
-          paddingBottom: 0, // Remove padding padrão do iOS
+          backgroundColor: '#09090b', // zinc-950
+          borderTopColor: '#27272a',  // zinc-800
+          height: 64, // Um pouco mais alto para conforto
+          paddingBottom: 10,
+          paddingTop: 10,
         },
-        // Centraliza os ícones verticalmente na nova barra mais alta
-        tabBarItemStyle: {
-          height: 64,
-          paddingTop: 0,
-        }
+        tabBarActiveTintColor: '#10b981', // emerald-500
+        tabBarInactiveTintColor: '#71717a', // zinc-500
+        tabBarShowLabel: false, // Visual mais limpo, só ícones
       }}
     >
       {/* 1. Dashboard (Home) */}
       <Tabs.Screen
         name="dashboard"
         options={{
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`items-center justify-center w-12 h-12 rounded-full ${focused ? 'bg-emerald-500/10' : ''}`}>
-              <Home size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
-            </View>
-          ),
+          title: 'Início',
+          tabBarIcon: ({ color, size }) => <Home color={color} size={24} />,
         }}
       />
 
-      {/* 2. Rotas a ESCONDER da TabBar (Importante!) */}
+      {/* 2. Biblioteca (Agora existe!) */}
       <Tabs.Screen
-        name="read/[bookId]"
+        name="library"
         options={{
-          // Isso remove o botão da barra, mas mantem a rota acessível
-          href: null,
-          tabBarStyle: { display: 'none' }, // Esconde a barra inteira quando estiver lendo
+          title: 'Biblioteca',
+          tabBarIcon: ({ color, size }) => <BookOpen color={color} size={24} />,
         }}
       />
 
-      {/* 3. Perfil / Configurações (Exemplo de segunda aba) */}
-      {/* Como você ainda não tem um arquivo profile.tsx explícito na lista, 
-          vou assumir que pode criar ou usar um placeholder. 
-          Se não tiver, remova esta Tab ou aponte para settings. */}
-       <Tabs.Screen
-        name="profile" // Crie app/(app)/profile.tsx se não existir
+      {/* 3. Perfil (Agora existe!) */}
+      <Tabs.Screen
+        name="profile"
         options={{
-            href: null, // Deixando null por enquanto pois não vi o arquivo na lista
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => <User color={color} size={24} />,
         }}
       />
 
+      {/* 4. Rota do Leitor (Oculta)
+         Usamos o nome exato que o aviso mostrou: "read/[bookId]/index"
+      */}
+      <Tabs.Screen
+        name="read/[bookId]/index"
+        options={{
+          href: null, // Isso remove o ícone da barra de abas
+          tabBarStyle: { display: 'none' }, // Garante que a barra suma quando estiver lendo
+        }}
+      />
     </Tabs>
   );
 }

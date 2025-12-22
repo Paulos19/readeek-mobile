@@ -1,6 +1,3 @@
-// app/(app)/_types/book.ts
-
-// Define apenas os papéis que existem no model User do Prisma (conforme o schema)
 export type UserRole = 'ADMIN' | 'USER';
 
 export interface UserProfile {
@@ -17,8 +14,12 @@ export interface Book {
   coverUrl: string | null;
   filePath: string;
   description: string | null;
-  
-  // Metadados de Leitura (Sincronização)
+
+  // --- CORREÇÃO: Campo obrigatório que vem da API ---
+  userId: string; 
+  // --------------------------------------------------
+
+  // Metadados de Leitura
   progress: number;
   currentLocation: string | null;
   
@@ -27,7 +28,7 @@ export interface Book {
   isDownloading: boolean;
   downloadProgress: number;
   
-  // Metadados Sociais (Loja/Comunidade)
+  // Metadados Sociais
   downloadsCount?: number;
   owner?: UserProfile;
 }

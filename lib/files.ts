@@ -1,66 +1,74 @@
-// lib/files.ts
-// MUDANÇA: Importamos do subcaminho /legacy para acessar os métodos antigos e estáveis
 import * as FileSystem from 'expo-file-system/legacy';
 
-const BOOKS_DIR = FileSystem.documentDirectory + 'books/';
-
-// Garante que a pasta existe
-const ensureDirExists = async () => {
-  const dirInfo = await FileSystem.getInfoAsync(BOOKS_DIR);
-  if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(BOOKS_DIR, { intermediates: true });
-  }
-};
+// URL base para montar o caminho dos arquivos (mesma da API)
+const BASE_URL = 'https://readeek.vercel.app'; 
 
 export const fileManager = {
-  /**
-   * Retorna o caminho local completo onde o livro deve ser salvo
-   */
-  getLocalBookUri: (bookId: string) => {
-    return `${BOOKS_DIR}${bookId}.epub`;
-  },
+  // Define o diretório onde os livros serão salvos
+  booksDir: `${FileSystem.documentDirectory}books/`,
 
-  /**
-   * Verifica se o livro já foi baixado
-   */
-  checkBookExists: async (bookId: string) => {
-    await ensureDirExists();
-    const uri = `${BOOKS_DIR}${bookId}.epub`;
-    const info = await FileSystem.getInfoAsync(uri);
-    return info.exists;
-  },
-
-  /**
-   * Baixa o livro e retorna a URI local
-   */
-  downloadBook: async (url: string, bookId: string, onProgress?: (progress: number) => void) => {
-    await ensureDirExists();
-    const localUri = `${BOOKS_DIR}${bookId}.epub`;
-
-    const downloadResumable = FileSystem.createDownloadResumable(
-      url,
-      localUri,
-      {},
-      (downloadProgress) => {
-        const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-        if (onProgress) onProgress(progress * 100);
-      }
-    );
-
-    try {
-      const result = await downloadResumable.downloadAsync();
-      return result?.uri;
-    } catch (e) {
-      console.error("Erro no download:", e);
-      throw e;
+  // Garante que a pasta existe antes de qualquer operação
+  ensureDirExists: async () => {
+    const dirInfo = await FileSystem.getInfoAsync(fileManager.booksDir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(fileManager.booksDir, { intermediates: true });
     }
   },
 
-  /**
-   * Remove um livro do armazenamento (para liberar espaço)
-   */
+  // Verifica se o livro já foi baixado
+  checkBookExists: async (bookId: string) => {
+    const uri = `${fileManager.booksDir}${bookId}.epub`;
+    const fileInfo = await FileSystem.getInfoAsync(uri);
+    return fileInfo.exists;
+  },
+
+  // Retorna a URI local para o Leitor
+  getLocalBookUri: (bookId: string) => {
+    return `${fileManager.booksDir}${bookId}.epub`;
+  },
+
+  // DELETAR (Para limpar espaço)
   deleteBook: async (bookId: string) => {
-    const uri = `${BOOKS_DIR}${bookId}.epub`;
+    const uri = `${fileManager.booksDir}${bookId}.epub`;
     await FileSystem.deleteAsync(uri, { idempotent: true });
+  },
+
+  // DOWNLOAD (Corrigido e Robusto)
+  downloadBook: async (
+    filePath: string, 
+    bookId: string, 
+    onProgress: (progress: number) => void
+  ) => {
+    try {
+      await fileManager.ensureDirExists();
+
+      // Tratamento da URL: Se vier relativa (/uploads...), adiciona o domínio
+      const fullUrl = filePath.startsWith('http') 
+        ? filePath 
+        : `${BASE_URL}${filePath.startsWith('/') ? '' : '/'}${filePath}`;
+
+      const localUri = `${fileManager.booksDir}${bookId}.epub`;
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        fullUrl,
+        localUri,
+        {},
+        (downloadProgress) => {
+          const progress = (downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100;
+          onProgress(progress);
+        }
+      );
+
+      const result = await downloadResumable.downloadAsync();
+      
+      if (!result || result.status !== 200) {
+        throw new Error("Download falhou ou arquivo inválido.");
+      }
+
+      return result.uri;
+    } catch (error) {
+      console.error("Erro no download:", error);
+      throw error; // Repassa o erro para o Dashboard tratar
+    }
   }
 };
