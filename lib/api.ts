@@ -58,3 +58,13 @@ export const highlightService = {
         await api.delete(`/mobile/highlights?id=${id}`);
     }
 };
+
+export const registerDownload = async (bookId: string) => {
+    try {
+        const response = await api.post('/mobile/books/download', { bookId });
+        return response.data.newCount; // Retorna o novo número se precisar atualizar a UI
+    } catch (error) {
+        console.error("[API] Falha ao registrar download", error);
+        return null;
+    }
+};

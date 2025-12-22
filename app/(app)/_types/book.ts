@@ -16,6 +16,7 @@ export interface Book {
   author: string | null;
   coverUrl: string | null;
   filePath: string;
+  description: string | null;
   
   // Metadados de Leitura (Sincronização)
   progress: number;
