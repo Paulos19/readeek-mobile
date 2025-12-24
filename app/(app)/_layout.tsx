@@ -1,51 +1,50 @@
 import { Tabs } from 'expo-router';
-import { useAuthStore } from 'stores/useAuthStore';
-import { CustomTabBar } from './_components/ui/TabBar/CustomTabBar';
+import React from 'react';
+import { View } from 'react-native';
+import { StandardTabBar } from './_components/ui/TabBar/StandardTabBar'; // Ajuste o caminho se necessário
 
 export default function AppLayout() {
-  const { token } = useAuthStore();
-  
-  // Se não houver token, retorna null para evitar flash de conteúdo protegido
-  if (!token) return null; 
-
   return (
     <Tabs
-      // Substituímos a TabBar nativa pelo nosso componente flutuante customizado
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={(props) => <StandardTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        // Garante que a TabBar suma quando o teclado abrir (UX padrão Android)
-        tabBarHideOnKeyboard: true,
+        // Oculta a tab bar quando o teclado abre (opcional, mas bom para UX de chat)
+        tabBarHideOnKeyboard: true, 
+        animation: 'shift',
       }}
     >
-      {/* 1. Rotas Visíveis na TabBar */}
       <Tabs.Screen 
         name="dashboard" 
-        options={{ title: 'Início' }} 
+        options={{ title: 'Dashboard' }} 
       />
       
       <Tabs.Screen 
         name="library" 
-        options={{ title: 'Biblioteca' }} 
-      />
-      
-      <Tabs.Screen 
-        name="community" 
-        options={{ title: 'Comunidade' }} 
-      />
-      
-      <Tabs.Screen 
-        name="profile" 
-        options={{ title: 'Perfil' }} 
+        options={{ title: 'Library' }} 
       />
 
-      {/* 2. Rota do Leitor (Oculta da TabBar) */}
-      <Tabs.Screen
-        name="read/[bookId]/index"
-        options={{
-          href: null, // Remove o botão da navegação
-          tabBarStyle: { display: 'none' }, // Garante que a barra suma ao entrar
-        }}
+      {/* NOVA ROTA SOCIAL (CENTRAL) */}
+      <Tabs.Screen 
+        name="social" 
+        options={{ title: 'Social' }} 
+      />
+
+      {/* Rota de Comunidades (Lista) */}
+      <Tabs.Screen 
+        name="community" 
+        options={{ title: 'Communities' }} 
+      />
+
+      <Tabs.Screen 
+        name="profile" 
+        options={{ title: 'Profile' }} 
+      />
+
+      {/* Rotas ocultas da TabBar (Detail Pages) */}
+      <Tabs.Screen 
+        name="read/[bookId]/index" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
       />
     </Tabs>
   );

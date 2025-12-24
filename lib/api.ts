@@ -272,3 +272,30 @@ export const communityService = {
     return res.data; // { action: 'added' | 'removed' }
   }
 };
+
+export const socialService = {
+  getFeed: async () => {
+    const res = await api.get('/mobile/social/feed');
+    return res.data;
+  },
+
+  createPost: async (content: string, type: 'POST' | 'EXCERPT' | 'CHALLENGE', bookId?: string) => {
+    const res = await api.post('/mobile/social/posts', { content, type, bookId });
+    return res.data;
+  },
+
+  toggleLike: async (postId: string) => {
+    const res = await api.post(`/mobile/social/posts/${postId}/react`);
+    return res.data;
+  },
+  
+  // Reutiliza a lógica de buscar meus livros para o seletor de Citação
+  getMyBooks: async () => {
+    const res = await api.get('/mobile/books');
+    return res.data;
+  },
+  deletePost: async (postId: string) => {
+    const res = await api.delete(`/mobile/social/posts/${postId}`);
+    return res.data;
+  }
+};
