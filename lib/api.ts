@@ -274,28 +274,89 @@ export const communityService = {
 };
 
 export const socialService = {
+  // --- FEED PRINCIPAL ---
   getFeed: async () => {
     const res = await api.get('/mobile/social/feed');
     return res.data;
   },
 
-  createPost: async (content: string, type: 'POST' | 'EXCERPT' | 'CHALLENGE', bookId?: string) => {
-    const res = await api.post('/mobile/social/posts', { content, type, bookId });
+  // --- BUSCA DE USUÁRIOS (MENÇÕES) ---
+  searchUsers: async (query: string) => {
+    try {
+        const res = await api.get('/mobile/users/search', { params: { query } });
+        return res.data;
+    } catch (error) {
+        console.warn("Rota de busca de usuários não encontrada ou falhou.");
+        return []; 
+    }
+  },
+
+  // --- CRIAÇÃO DE POST (HÍBRIDO: JSON ou MULTIPART) ---
+  createPost: async (data: { content: string; type: 'POST' | 'EXCERPT' | 'CHALLENGE'; bookId?: string; imageUri?: string }) => {
+    const { content, type, bookId, imageUri } = data;
+
+    // Se tiver imagem, OBRIGATÓRIO usar FormData
+    if (imageUri) {
+        const formData = new FormData();
+        formData.append('content', content);
+        formData.append('type', type);
+        if (bookId) formData.append('bookId', bookId);
+
+        // Tratamento de arquivo no React Native
+        const filename = imageUri.split('/').pop() || 'post.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const mimeType = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('image', {
+            uri: imageUri,
+            name: filename,
+            type: mimeType,
+        } as any); // 'as any' é necessário devido à tipagem estrita do TS vs React Native
+
+        const res = await api.post('/mobile/social/posts', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return res.data;
+    } else {
+        // Se for só texto, envia JSON normal (mais rápido e leve)
+        const res = await api.post('/mobile/social/posts', { content, type, bookId });
+        return res.data;
+    }
+  },
+
+  // --- AÇÕES DO POST ---
+  toggleLike: async (postId: string) => {
+    const res = await api.post(`/mobile/social/posts/${postId}/react`);
+    return res.data; // Espera { action: 'added' | 'removed' }
+  },
+
+  deletePost: async (postId: string) => {
+    const res = await api.delete(`/mobile/social/posts?id=${postId}`); // Ou delete(`/mobile/social/posts/${postId}`) dependendo da sua rota
     return res.data;
   },
 
-  toggleLike: async (postId: string) => {
-    const res = await api.post(`/mobile/social/posts/${postId}/react`);
-    return res.data;
-  },
-  
-  // Reutiliza a lógica de buscar meus livros para o seletor de Citação
+  // --- LIVROS (Para selecionar citação) ---
   getMyBooks: async () => {
-    const res = await api.get('/mobile/books');
+    const res = await api.get('/mobile/books'); // Reutiliza rota existente
     return res.data;
   },
-  deletePost: async (postId: string) => {
-    const res = await api.delete(`/mobile/social/posts/${postId}`);
+
+  // --- SISTEMA DE COMENTÁRIOS (SOCIAL) ---
+  getComments: async (postId: string) => {
+    const res = await api.get(`/mobile/social/posts/${postId}/comments`);
     return res.data;
+  },
+
+  createComment: async (postId: string, content: string, parentId?: string) => {
+    const res = await api.post(`/mobile/social/posts/${postId}/comments`, { 
+      content, 
+      parentId 
+    });
+    return res.data;
+  },
+
+  toggleCommentLike: async (commentId: string) => {
+    const res = await api.post(`/mobile/social/comments/${commentId}/react`);
+    return res.data; 
   }
 };
