@@ -172,11 +172,70 @@ export const communityService = {
   
   getById: async (id: string) => {
     const res = await api.get(`/mobile/communities/${id}`);
-    return res.data as (Community & { posts: CommunityPost[] });
+    // Atualizada a tipagem para incluir os novos campos necessários na UI
+    return res.data as (Community & { 
+        posts: CommunityPost[];
+        files: any[];    // Lista de arquivos (PDF/EPUB)
+        members: any[];  // Lista de membros para gestão
+        ownerId: string;
+    });
   },
 
-  create: async (data: { name: string; description: string; type: string; visibility: string }) => {
-    const res = await api.post('/mobile/communities', data);
+  create: async (data: { 
+    name: string; 
+    description: string; 
+    visibility: 'PUBLIC' | 'PRIVATE'; 
+    password?: string;
+    coverUri?: string; // URI local da imagem
+  }) => {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('description', data.description);
+    formData.append('visibility', data.visibility);
+    if (data.password) formData.append('password', data.password);
+
+    if (data.coverUri) {
+        const filename = data.coverUri.split('/').pop() || 'cover.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image`;
+        
+        formData.append('cover', {
+            uri: data.coverUri,
+            name: filename,
+            type,
+        } as any);
+    }
+
+    const res = await api.post('/mobile/communities', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+
+  join: async (communityId: string, password?: string) => {
+    // Envia a senha no corpo da requisição para comunidades privadas
+    const res = await api.post(`/mobile/communities/${communityId}/join`, { password });
+    return res.data;
+  },
+
+  manageMember: async (communityId: string, memberId: string, action: 'BAN' | 'PROMOTE') => {
+    const res = await api.patch(`/mobile/communities/${communityId}/members`, { memberId, action });
+    return res.data;
+  },
+
+  uploadFile: async (communityId: string, fileUri: string, fileName: string, mimeType: string) => {
+    const formData = new FormData();
+    
+    // Formatação específica do objeto 'file' para o React Native funcionar com FormData
+    formData.append('file', {
+      uri: fileUri,
+      name: fileName,
+      type: mimeType
+    } as any);
+
+    const res = await api.post(`/mobile/communities/${communityId}/files`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return res.data;
   }
 };
