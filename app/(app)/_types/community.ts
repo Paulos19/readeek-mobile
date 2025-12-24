@@ -2,7 +2,8 @@ export interface Community {
   id: string;
   name: string;
   description: string | null;
-  visibility: 'PUBLIC' | 'PRIVATE';
+  coverUrl?: string | null; // Adicionado para suportar o banner
+  visibility: 'public' | 'private'; // Atualizado para minúsculas
   _count?: {
     members: number;
     posts: number;

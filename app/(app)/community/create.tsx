@@ -39,7 +39,7 @@ export default function CreateCommunity() {
       await communityService.create({
         name,
         description,
-        visibility: isPrivate ? 'PRIVATE' : 'PUBLIC',
+        visibility: isPrivate ? 'private' : 'public',
         password,
         coverUri: coverUri || undefined
       });

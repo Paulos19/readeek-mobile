@@ -165,28 +165,33 @@ export const profileService = {
 };
 
 export const communityService = {
+  // --- LEITURA E DESCOBERTA ---
   getAll: async () => {
     const res = await api.get('/mobile/communities');
-    return res.data as Community[];
+    return res.data; 
   },
   
   getById: async (id: string) => {
     const res = await api.get(`/mobile/communities/${id}`);
-    // Atualizada a tipagem para incluir os novos campos necessários na UI
-    return res.data as (Community & { 
-        posts: CommunityPost[];
-        files: any[];    // Lista de arquivos (PDF/EPUB)
-        members: any[];  // Lista de membros para gestão
-        ownerId: string;
-    });
+    // Retorna { ...community, posts, files, members, isLocked, currentUserRole }
+    return res.data; 
   },
 
+  // --- BUSCA DE MEMBROS (PARA MENÇÃO @) ---
+  searchMembers: async (communityId: string, query: string) => {
+    const res = await api.get(`/mobile/communities/${communityId}/members/search`, {
+      params: { query }
+    });
+    return res.data; 
+  },
+
+  // --- GESTÃO DA COMUNIDADE ---
   create: async (data: { 
     name: string; 
     description: string; 
-    visibility: 'PUBLIC' | 'PRIVATE'; 
+    visibility: 'public' | 'private'; 
     password?: string;
-    coverUri?: string; // URI local da imagem
+    coverUri?: string; 
   }) => {
     const formData = new FormData();
     formData.append('name', data.name);
@@ -197,7 +202,7 @@ export const communityService = {
     if (data.coverUri) {
         const filename = data.coverUri.split('/').pop() || 'cover.jpg';
         const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : `image`;
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
         
         formData.append('cover', {
             uri: data.coverUri,
@@ -213,20 +218,13 @@ export const communityService = {
   },
 
   join: async (communityId: string, password?: string) => {
-    // Envia a senha no corpo da requisição para comunidades privadas
     const res = await api.post(`/mobile/communities/${communityId}/join`, { password });
     return res.data;
   },
 
-  manageMember: async (communityId: string, memberId: string, action: 'BAN' | 'PROMOTE') => {
-    const res = await api.patch(`/mobile/communities/${communityId}/members`, { memberId, action });
-    return res.data;
-  },
-
+  // --- PERMISSÕES E ARQUIVOS ---
   uploadFile: async (communityId: string, fileUri: string, fileName: string, mimeType: string) => {
     const formData = new FormData();
-    
-    // Formatação específica do objeto 'file' para o React Native funcionar com FormData
     formData.append('file', {
       uri: fileUri,
       name: fileName,
@@ -237,5 +235,40 @@ export const communityService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return res.data;
+  },
+
+  manageMember: async (communityId: string, memberId: string, action: 'BAN' | 'PROMOTE') => {
+    const res = await api.patch(`/mobile/communities/${communityId}/members`, { memberId, action });
+    return res.data;
+  },
+
+  // --- INTERAÇÃO SOCIAL: POSTS ---
+  createPost: async (communityId: string, content: string) => {
+    const res = await api.post(`/mobile/communities/${communityId}/posts`, { content });
+    return res.data;
+  },
+
+  toggleLike: async (postId: string) => {
+    const res = await api.post(`/mobile/communities/posts/${postId}/react`, { emoji: '❤️' });
+    return res.data; // { action: 'added' | 'removed' }
+  },
+
+  // --- INTERAÇÃO SOCIAL: COMENTÁRIOS ---
+  getComments: async (postId: string) => {
+    const res = await api.get(`/mobile/communities/posts/${postId}/comments`);
+    return res.data;
+  },
+
+  createComment: async (postId: string, content: string, parentId?: string) => {
+    const res = await api.post(`/mobile/communities/posts/${postId}/comments`, { 
+      content, 
+      parentId // Opcional: ID do comentário pai para respostas aninhadas
+    });
+    return res.data;
+  },
+
+  toggleCommentLike: async (commentId: string) => {
+    const res = await api.post(`/mobile/communities/comments/${commentId}/react`);
+    return res.data; // { action: 'added' | 'removed' }
   }
 };
