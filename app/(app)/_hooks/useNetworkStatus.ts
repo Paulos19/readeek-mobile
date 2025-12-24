@@ -2,24 +2,26 @@ import { useState, useEffect } from 'react';
 import * as Network from 'expo-network';
 
 export const useNetworkStatus = () => {
-  const [isConnected, setIsConnected] = useState(true);
+  // Começamos com false por segurança, ou null se quiser tratar "carregando"
+  const [isConnected, setIsConnected] = useState(false);
+  const [isChecking, setIsChecking] = useState(true); // Novo estado
 
   const checkConnection = async () => {
     try {
       const state = await Network.getNetworkStateAsync();
       setIsConnected(!!state.isConnected && !!state.isInternetReachable);
     } catch (e) {
-      // Se der erro ao checar, assumimos que está offline por segurança
       setIsConnected(false);
+    } finally {
+      setIsChecking(false); // Finaliza a verificação
     }
   };
 
   useEffect(() => {
     checkConnection();
-    // Polling simples a cada 5 segundos para atualizar o status sem precisar de lib extra (NetInfo)
     const interval = setInterval(checkConnection, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  return { isConnected, checkConnection };
+  return { isConnected, isChecking, checkConnection };
 };

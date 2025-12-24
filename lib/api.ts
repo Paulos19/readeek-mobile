@@ -1,6 +1,7 @@
 // lib/api.ts
 import axios from 'axios';
 import { storage } from './storage';
+import { Community, CommunityPost } from 'app/(app)/_types/community';
 
 // IMPORTANTE: Mude para o IP da sua máquina se estiver testando no device físico
 // Ex: http://192.168.1.15:3000/api
@@ -163,3 +164,19 @@ export const profileService = {
   }
 };
 
+export const communityService = {
+  getAll: async () => {
+    const res = await api.get('/mobile/communities');
+    return res.data as Community[];
+  },
+  
+  getById: async (id: string) => {
+    const res = await api.get(`/mobile/communities/${id}`);
+    return res.data as (Community & { posts: CommunityPost[] });
+  },
+
+  create: async (data: { name: string; description: string; type: string; visibility: string }) => {
+    const res = await api.post('/mobile/communities', data);
+    return res.data;
+  }
+};

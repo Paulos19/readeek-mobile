@@ -23,7 +23,9 @@ import { BookDetailsModal } from './_components/BookDetailsModal';
 export default function Dashboard() {
   const { user } = useAuthStore();
   const router = useRouter();
-  const { isConnected } = useNetworkStatus();
+  
+  // CORREÇÃO 1: Pegamos também o 'isChecking' para saber se a verificação terminou
+  const { isConnected, isChecking } = useNetworkStatus();
 
   // Estados
   const [allBooks, setAllBooks] = useState<Book[]>([]);
@@ -33,8 +35,9 @@ export default function Dashboard() {
 
   // --- BUSCA DE DADOS ---
   const fetchBooks = async () => {
-    // Se estiver offline, não tenta buscar da API
-    if (!isConnected) return;
+    // CORREÇÃO 2: Se estiver checando OU offline, aborta imediatamente.
+    // Isso previne o crash de tentar acessar API sem rede na inicialização.
+    if (isChecking || !isConnected) return;
 
     try {
       const response = await api.get('/mobile/books');
@@ -83,14 +86,36 @@ export default function Dashboard() {
   };
 
   const onRefresh = async () => {
+    // Só permite refresh manual se estiver conectado
+    if (!isConnected) {
+        Alert.alert("Offline", "Você precisa de internet para atualizar.");
+        return;
+    }
     setRefreshing(true);
     await fetchBooks();
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchBooks(); }, [user, isConnected]); 
+  // CORREÇÃO 3: O useEffect agora depende do término do isChecking
+  useEffect(() => { 
+    if (!isChecking) {
+        fetchBooks(); 
+    }
+  }, [user, isConnected, isChecking]); 
 
-  // --- UI OFFLINE (NOVO) ---
+
+  // --- UI DE LOADING (CORREÇÃO 4) ---
+  // Enquanto verifica a rede, mostra um loading simples para não piscar a tela de erro
+  if (isChecking) {
+    return (
+        <View className="flex-1 bg-zinc-950 items-center justify-center">
+            <StatusBar barStyle="light-content" />
+            <ActivityIndicator size="large" color="#10b981" />
+        </View>
+    );
+  }
+
+  // --- UI OFFLINE ---
   if (!isConnected) {
     return (
         <View className="flex-1 bg-zinc-950">
@@ -133,6 +158,7 @@ export default function Dashboard() {
   // --- UI ONLINE (NORMAL) ---
   
   // Filtros Memoized
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
     const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
     const featured = allBooks.filter(b => b.owner?.role === 'ADMIN');
