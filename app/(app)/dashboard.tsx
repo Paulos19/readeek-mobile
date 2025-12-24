@@ -28,20 +28,28 @@ export default function Dashboard() {
   // Estados
   const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true); // <--- NOVO ESTADO DE LOADING
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
   // --- BUSCA DE DADOS ---
   const fetchBooks = async () => {
-    // Se estiver offline, não tenta buscar da API
-    if (!isConnected) return;
+    // Se estiver offline, cancela o loading e retorna
+    if (isConnected === false) {
+        setLoading(false);
+        return;
+    }
 
     try {
       const response = await api.get('/mobile/books');
-      const apiBooks = response.data;
+      
+      // Validação de segurança: garante que é um array
+      const apiBooks = Array.isArray(response.data) ? response.data : [];
 
       const processedBooks: Book[] = await Promise.all(apiBooks.map(async (book: any) => {
-        const isDownloaded = await fileManager.checkBookExists(book.id);
+        // Proteção contra falhas no fileManager
+        let isDownloaded = false;
+        try { isDownloaded = await fileManager.checkBookExists(book.id); } catch (e) {}
         
         const rawRole = book.userRole || 'USER';
         const safeRole: UserRole = (rawRole === 'ADMIN' || rawRole === 'USER') ? rawRole : 'USER';
@@ -56,10 +64,14 @@ export default function Dashboard() {
         // Sync Reverso (Apenas se online e for meu livro)
         let localCfi = null;
         if (book.currentLocation && book.userId === user?.id) {
-              localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
-              if (book.currentLocation !== localCfi) {
-                  await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
-                  localCfi = book.currentLocation;
+              try {
+                  localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
+                  if (book.currentLocation !== localCfi) {
+                      await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
+                      localCfi = book.currentLocation;
+                  }
+              } catch (e) {
+                  console.warn("Erro no sync de progresso:", e);
               }
         }
 
@@ -79,6 +91,9 @@ export default function Dashboard() {
       setAllBooks(processedBooks);
     } catch (error) {
       console.error("Erro ao carregar dashboard:", error);
+      // Opcional: Mostrar um toast de erro aqui
+    } finally {
+      setLoading(false); // <--- Garante que o loading pare sempre
     }
   };
 
@@ -88,9 +103,11 @@ export default function Dashboard() {
     setRefreshing(false);
   };
 
-  useEffect(() => { fetchBooks(); }, [user, isConnected]); 
+  useEffect(() => { 
+      setLoading(true); 
+      fetchBooks(); 
+  }, [user, isConnected]); 
 
-  // ✅ CORREÇÃO: useMemo movido para ANTES do retorno condicional (Offline Check)
   // Filtros Memoized
   const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
     const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
@@ -103,7 +120,7 @@ export default function Dashboard() {
 
 
   // --- UI OFFLINE ---
-  if (!isConnected) {
+  if (isConnected === false) { // Verifica explicitamente false (evita null inicial)
     return (
         <View className="flex-1 bg-zinc-950">
             <StatusBar barStyle="light-content" />
@@ -140,6 +157,16 @@ export default function Dashboard() {
             </SafeAreaView>
         </View>
     );
+  }
+
+  // --- UI LOADING INICIAL ---
+  if (loading && allBooks.length === 0) {
+      return (
+          <View className="flex-1 bg-black items-center justify-center">
+              <ActivityIndicator size="large" color="#10b981" />
+              <Text className="text-zinc-500 text-xs mt-4">Carregando sua biblioteca...</Text>
+          </View>
+      );
   }
 
   // --- UI ONLINE (NORMAL) ---
