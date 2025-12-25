@@ -1,25 +1,50 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Image, StatusBar, ActivityIndicator, FlatList } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, Image, StatusBar, ActivityIndicator, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Search, Plus, MapPin, Store, Coins } from 'lucide-react-native';
-import { getMarketplaceFeed, MarketplaceFeed, MarketProduct } from '../../../lib/api';
+import { useRouter, Link } from 'expo-router';
+import { Search, Plus, MapPin, Store, Coins, Bell, MessageCircle, ChevronRight, BookOpen, Star } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { api, getMarketplaceFeed, MarketplaceFeed, MarketProduct } from '../../../lib/api';
+import { Book } from '../_types/book'; // Importando tipo de livro existente
+
+const { width } = Dimensions.get('window');
 
 export default function MarketplaceScreen() {
   const router = useRouter();
   const [feed, setFeed] = useState<MarketplaceFeed | null>(null);
+  const [suggestedBooks, setSuggestedBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [notificationsCount, setNotificationsCount] = useState(3); // Mock de notificações
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
-    const data = await getMarketplaceFeed();
-    setFeed(data);
-    setLoading(false);
+    try {
+      const [marketData, booksResponse] = await Promise.all([
+        getMarketplaceFeed(),
+        api.get('/mobile/books').then(res => res.data).catch(() => []) // Busca livros para sugestão
+      ]);
+      
+      setFeed(marketData);
+      // Pega 5 livros aleatórios ou recentes para sugerir
+      if (Array.isArray(booksResponse)) {
+        setSuggestedBooks(booksResponse.slice(0, 5)); 
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadData();
   };
 
   const handleSearch = async () => {
@@ -29,157 +54,262 @@ export default function MarketplaceScreen() {
     setLoading(false);
   };
 
-  const ProductCard = ({ product, isCredit = false }: { product: MarketProduct, isCredit?: boolean }) => (
-    <TouchableOpacity 
-        className="mr-4 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden w-40"
-        // CORREÇÃO AQUI: Apontando para a rota correta /(app)/product/...
-        onPress={() => router.push(`/(app)/product/${product.id}` as any)} 
-    >
-        <Image 
-            source={{ uri: product.images[0]?.url || 'https://via.placeholder.com/150' }}
-            className="w-full h-40 bg-zinc-800"
-            resizeMode="cover"
-        />
-        <View className="p-3">
-            <Text numberOfLines={1} className="text-white font-bold text-sm">{product.title}</Text>
-            
-            <View className="flex-row items-center mt-1">
-                {isCredit ? (
-                    <>
-                        <Coins size={12} color="#fbbf24" style={{ marginRight: 4 }} />
-                        <Text className="text-amber-400 font-bold text-xs">{product.price} Créditos</Text>
-                    </>
-                ) : (
-                    <Text className="text-emerald-500 font-bold text-sm">R$ {Number(product.price).toFixed(2)}</Text>
-                )}
-            </View>
+  // --- UI COMPONENTS ---
 
-            {!isCredit && (
-                <View className="flex-row items-center mt-2 opacity-60">
-                    <MapPin size={10} color="#a1a1aa" />
-                    <Text numberOfLines={1} className="text-zinc-400 text-[10px] ml-1">{product.address}</Text>
+  const Header = () => (
+    <View className="px-5 pt-2 pb-4 bg-black/80 z-10">
+        {/* Top Bar */}
+        <View className="flex-row justify-between items-center mb-4">
+            <View>
+                <Text className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-0.5">Explore</Text>
+                <Text className="text-white text-2xl font-black tracking-tight">Marketplace</Text>
+            </View>
+            
+            <View className="flex-row items-center gap-3">
+                {/* Botão Vender */}
+                <TouchableOpacity 
+                    onPress={() => router.push('/(app)/shop/create')}
+                    className="bg-emerald-600 h-10 px-4 rounded-full flex-row items-center justify-center shadow-lg shadow-emerald-900/30"
+                >
+                    <Plus size={18} color="white" style={{marginRight: 4}} />
+                    <Text className="text-white font-bold text-xs">Vender</Text>
+                </TouchableOpacity>
+
+                {/* Ícones de Ação */}
+                <View className="flex-row gap-2 bg-zinc-900 p-1 rounded-full border border-zinc-800">
+                    <Link href="/(app)/chat" asChild>
+                        <TouchableOpacity className="w-9 h-9 items-center justify-center rounded-full bg-zinc-800">
+                            <MessageCircle size={18} color="white" />
+                        </TouchableOpacity>
+                    </Link>
+                    
+                    <TouchableOpacity 
+                        className="w-9 h-9 items-center justify-center rounded-full bg-zinc-800 relative"
+                        onPress={() => alert("Notificações em breve")}
+                    >
+                        <Bell size={18} color="white" />
+                        {notificationsCount > 0 && (
+                            <View className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-zinc-900" />
+                        )}
+                    </TouchableOpacity>
                 </View>
-            )}
+            </View>
         </View>
+
+        {/* Search Bar */}
+        <View className="flex-row items-center bg-zinc-900/80 rounded-2xl px-4 py-3 border border-zinc-800 shadow-sm">
+            <Search size={20} color="#71717a" />
+            <TextInput 
+                placeholder="O que você procura hoje?" 
+                placeholderTextColor="#71717a"
+                className="flex-1 ml-3 text-white font-medium"
+                value={search}
+                onChangeText={setSearch}
+                onSubmitEditing={handleSearch}
+                returnKeyType="search"
+            />
+        </View>
+    </View>
+  );
+
+  const HeroBanner = () => (
+    <View className="px-5 mb-8">
+        <TouchableOpacity activeOpacity={0.9} className="w-full h-44 rounded-3xl overflow-hidden shadow-2xl shadow-purple-900/20">
+            <Image 
+                source={{ uri: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80' }}
+                className="absolute w-full h-full"
+                resizeMode="cover"
+            />
+            <LinearGradient
+                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.6)', '#000000']}
+                className="absolute w-full h-full justify-end p-5"
+            >
+                <View className="flex-row items-center mb-2">
+                    <View className="bg-purple-600 px-2 py-0.5 rounded text-xs mr-2">
+                        <Text className="text-white text-[10px] font-bold">DESTAQUE</Text>
+                    </View>
+                    <Text className="text-zinc-300 text-xs">Clube do Livro</Text>
+                </View>
+                <Text className="text-white font-bold text-2xl w-2/3 leading-7">Encontre raridades e troque experiências.</Text>
+            </LinearGradient>
+        </TouchableOpacity>
+    </View>
+  );
+
+  const SectionHeader = ({ title, icon: Icon, color, action }: any) => (
+    <View className="px-5 flex-row items-center justify-between mb-4">
+        <View className="flex-row items-center gap-2">
+            <View className={`w-8 h-8 rounded-full items-center justify-center bg-zinc-900 border border-zinc-800`}>
+                <Icon size={16} color={color} />
+            </View>
+            <Text className="text-white font-bold text-lg">{title}</Text>
+        </View>
+        {action && (
+            <TouchableOpacity onPress={action} className="flex-row items-center">
+                <Text className="text-zinc-500 text-xs font-bold mr-1">VER TUDO</Text>
+                <ChevronRight size={14} color="#71717a" />
+            </TouchableOpacity>
+        )}
+    </View>
+  );
+
+  const CreditProductCard = ({ product }: { product: MarketProduct }) => (
+    <TouchableOpacity 
+        className="mr-4 w-36 group"
+        onPress={() => router.push(`/(app)/product/${product.id}` as any)}
+    >
+        <View className="w-36 h-48 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden mb-2 relative">
+            <Image 
+                source={{ uri: product.images[0]?.url || 'https://via.placeholder.com/150' }}
+                className="w-full h-full opacity-90"
+                resizeMode="cover"
+            />
+            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.9)']} className="absolute bottom-0 w-full h-1/2 justify-end p-3">
+                <Text numberOfLines={1} className="text-amber-400 font-bold text-sm shadow-black">{product.price}</Text>
+                <Text className="text-zinc-400 text-[10px] font-bold uppercase">Créditos</Text>
+            </LinearGradient>
+            <View className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-white/10">
+                <Coins size={10} color="#fbbf24" />
+            </View>
+        </View>
+        <Text numberOfLines={1} className="text-zinc-200 font-bold text-xs ml-1">{product.title}</Text>
     </TouchableOpacity>
   );
 
-  const ShopCard = ({ shop }: { shop: any }) => (
-    <TouchableOpacity className="mr-4 items-center">
-        <View className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-zinc-700 overflow-hidden mb-2">
-            <Image 
-                source={{ uri: shop.imageUrl || `https://ui-avatars.com/api/?name=${shop.name}` }}
-                className="w-full h-full"
-            />
+  const ShopAvatar = ({ shop }: { shop: any }) => (
+    <Link href={`/(app)/shop/${shop.id}`} asChild>
+        <TouchableOpacity className="mr-5 items-center">
+            <View className="w-16 h-16 rounded-full p-0.5 border-2 border-purple-500/30 mb-2">
+                <Image 
+                    source={{ uri: shop.imageUrl || `https://ui-avatars.com/api/?name=${shop.name}` }}
+                    className="w-full h-full rounded-full bg-zinc-800"
+                />
+            </View>
+            <Text numberOfLines={1} className="text-zinc-300 text-[10px] font-bold w-20 text-center">{shop.name}</Text>
+        </TouchableOpacity>
+    </Link>
+  );
+
+  const BookSuggestionCard = ({ book }: { book: Book }) => (
+    <TouchableOpacity 
+        className="mr-3 w-28"
+        // Redireciona para o leitor ou detalhes do livro
+        onPress={() => router.push({ pathname: `/read/${book.id}`, params: { hasCover: book.coverUrl ? 'true' : 'false' } })}
+    >
+        <View className="w-28 h-40 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden mb-2 shadow-lg shadow-black/50">
+            {book.coverUrl ? (
+                <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />
+            ) : (
+                <View className="flex-1 items-center justify-center"><BookOpen size={24} color="#52525b" /></View>
+            )}
         </View>
-        <Text numberOfLines={1} className="text-zinc-300 text-xs font-bold w-20 text-center">{shop.name}</Text>
+        <Text numberOfLines={1} className="text-white font-bold text-xs ml-0.5">{book.title}</Text>
+        <Text numberOfLines={1} className="text-zinc-500 text-[10px] ml-0.5">{book.author}</Text>
     </TouchableOpacity>
   );
 
   return (
     <View className="flex-1 bg-black">
       <StatusBar barStyle="light-content" />
-      <SafeAreaView className="flex-1">
+      <SafeAreaView className="flex-1" edges={['top']}>
         
-        <View className="px-5 py-4 border-b border-zinc-900">
-            <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-white text-2xl font-bold">Marketplace</Text>
-                <TouchableOpacity 
-                    onPress={() => router.push('/(app)/shop/create')}
-                    className="bg-emerald-600 p-2 rounded-full"
-                >
-                    <Plus size={24} color="white" />
-                </TouchableOpacity>
-            </View>
-
-            <View className="flex-row items-center bg-zinc-900 rounded-xl px-4 py-3 border border-zinc-800">
-                <Search size={20} color="#71717a" />
-                <TextInput 
-                    placeholder="Buscar livros, produtos..." 
-                    placeholderTextColor="#71717a"
-                    className="flex-1 ml-3 text-white font-medium"
-                    value={search}
-                    onChangeText={setSearch}
-                    onSubmitEditing={handleSearch}
-                    returnKeyType="search"
-                />
-            </View>
-        </View>
+        <Header />
 
         {loading ? (
             <View className="flex-1 justify-center items-center">
                 <ActivityIndicator size="large" color="#10b981" />
             </View>
         ) : (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+            <ScrollView 
+                showsVerticalScrollIndicator={false} 
+                contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#10b981" />}
+            >
                 
-                {/* LOJA DE CRÉDITOS */}
+                <HeroBanner />
+
+                {/* 1. LOJA DE CRÉDITOS */}
                 {feed?.creditShop && feed.creditShop.length > 0 && (
-                    <View className="mt-6">
-                        <View className="px-5 flex-row items-center gap-2 mb-4">
-                            <Coins size={20} color="#fbbf24" />
-                            <Text className="text-amber-400 font-bold text-lg">Troque seus Créditos</Text>
-                        </View>
+                    <View className="mb-8">
+                        <SectionHeader title="Loja de Recompensas" icon={Coins} color="#fbbf24" action={() => {}} />
                         <FlatList 
                             horizontal
                             data={feed.creditShop}
                             keyExtractor={item => item.id}
-                            renderItem={({ item }) => <ProductCard product={item} isCredit />}
+                            renderItem={({ item }) => <CreditProductCard product={item} />}
                             contentContainerStyle={{ paddingHorizontal: 20 }}
                             showsHorizontalScrollIndicator={false}
                         />
                     </View>
                 )}
 
-                {/* LOJAS EM DESTAQUE */}
+                {/* 2. LOJAS */}
                 {feed?.shops && feed.shops.length > 0 && (
-                    <View className="mt-8">
-                        <View className="px-5 flex-row items-center gap-2 mb-4">
-                            <Store size={20} color="#a855f7" />
-                            <Text className="text-white font-bold text-lg">Lojas Parceiras</Text>
-                        </View>
+                    <View className="mb-8">
+                        <SectionHeader title="Lojas Oficiais" icon={Store} color="#a855f7" />
                         <FlatList 
                             horizontal
                             data={feed.shops}
                             keyExtractor={item => item.id}
-                            renderItem={({ item }) => <ShopCard shop={item} />}
+                            renderItem={({ item }) => <ShopAvatar shop={item} />}
                             contentContainerStyle={{ paddingHorizontal: 20 }}
                             showsHorizontalScrollIndicator={false}
                         />
                     </View>
                 )}
 
-                {/* RECENTES */}
-                <View className="mt-8 px-5">
-                    <Text className="text-white font-bold text-lg mb-4">Novidades na Comunidade</Text>
+                {/* 3. SUGESTÕES DE LIVROS */}
+                {suggestedBooks.length > 0 && (
+                    <View className="mb-8">
+                        <SectionHeader title="Para Ler Agora" icon={BookOpen} color="#3b82f6" />
+                        <FlatList 
+                            horizontal
+                            data={suggestedBooks}
+                            keyExtractor={item => item.id}
+                            renderItem={({ item }) => <BookSuggestionCard book={item} />}
+                            contentContainerStyle={{ paddingHorizontal: 20 }}
+                            showsHorizontalScrollIndicator={false}
+                        />
+                    </View>
+                )}
+
+                {/* 4. FEED DE PRODUTOS (Novidades) */}
+                <View className="px-5">
+                    <View className="flex-row items-center gap-2 mb-4">
+                        <View className="w-8 h-8 rounded-full items-center justify-center bg-zinc-900 border border-zinc-800">
+                            <Star size={16} color="#10b981" />
+                        </View>
+                        <Text className="text-white font-bold text-lg">Acabou de Chegar</Text>
+                    </View>
+
                     <View className="flex-row flex-wrap justify-between">
                         {feed?.recentDrops.map((product) => (
-                            <View key={product.id} className="w-[48%] mb-4">
-                                <TouchableOpacity 
-                                    className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden w-full pb-3"
-                                    // CORREÇÃO AQUI TAMBÉM
-                                    onPress={() => router.push(`/(app)/product/${product.id}` as any)}
-                                >
-                                    <Image 
-                                        source={{ uri: product.images[0]?.url || 'https://via.placeholder.com/150' }}
-                                        className="w-full h-44 bg-zinc-800"
-                                        resizeMode="cover"
-                                    />
-                                    <View className="p-3">
-                                        <Text numberOfLines={2} className="text-white font-bold text-sm h-10">{product.title}</Text>
-                                        <Text className="text-emerald-500 font-bold text-lg mt-1">R$ {Number(product.price).toFixed(2)}</Text>
-                                        
-                                        <View className="flex-row items-center mt-2 opacity-60">
-                                            <MapPin size={12} color="#a1a1aa" />
-                                            <Text numberOfLines={1} className="text-zinc-400 text-xs ml-1 flex-1">{product.address}</Text>
-                                        </View>
+                            <TouchableOpacity 
+                                key={product.id} 
+                                className="w-[48%] mb-4 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden"
+                                onPress={() => router.push(`/(app)/product/${product.id}` as any)}
+                            >
+                                <Image 
+                                    source={{ uri: product.images[0]?.url || 'https://via.placeholder.com/150' }}
+                                    className="w-full h-40 bg-zinc-800"
+                                    resizeMode="cover"
+                                />
+                                <View className="p-3">
+                                    <Text numberOfLines={2} className="text-white font-bold text-sm h-10 leading-5">{product.title}</Text>
+                                    <Text className="text-emerald-500 font-bold text-base mt-1">R$ {Number(product.price).toFixed(2)}</Text>
+                                    
+                                    <View className="flex-row items-center mt-2 opacity-60">
+                                        <MapPin size={10} color="#a1a1aa" />
+                                        <Text numberOfLines={1} className="text-zinc-400 text-[10px] ml-1 flex-1">{product.address}</Text>
                                     </View>
-                                </TouchableOpacity>
-                            </View>
+                                </View>
+                            </TouchableOpacity>
                         ))}
                     </View>
                     {feed?.recentDrops.length === 0 && (
-                        <Text className="text-zinc-500 text-center mt-4">Nenhum produto encontrado.</Text>
+                        <View className="py-10 items-center">
+                            <Text className="text-zinc-600">Nenhum produto novo por enquanto.</Text>
+                        </View>
                     )}
                 </View>
 

@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, StatusBar, Dimensions, Share, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Ionicons, MapPin, Share2, MessageCircle, ShoppingBag, BookOpen, ChevronRight } from 'lucide-react-native';
+import { MapPin, Share2, MessageCircle, ShoppingBag, BookOpen, ChevronRight, ChevronLeft, ChevronRightIcon } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getProductDetails, ProductDetailsResponse, buyProductWithCredits } from '../../../lib/api';
+import { 
+  getProductDetails, 
+  ProductDetailsResponse, 
+  buyProductWithCredits, 
+  startConversation // <--- Importado
+} from '../../../lib/api';
 import { useAuthStore } from '../../../stores/useAuthStore';
 
 const { width } = Dimensions.get('window');
@@ -13,8 +18,6 @@ export default function ProductDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   
-  // Pegue a função de refreshUser se ela existir no seu store, senão apenas ignore
-  // O importante aqui é ter o user para validações futuras se precisar
   const { user } = useAuthStore(); 
   
   const [data, setData] = useState<ProductDetailsResponse | null>(null);
@@ -45,12 +48,50 @@ export default function ProductDetailsScreen() {
     }
   };
 
+  // --- LÓGICA DO CHAT ---
+  const handleChat = async () => {
+    if (!data?.product || !user) return;
+    
+    // Verifica se o usuário é o dono do produto
+    if (data.product.shop.owner.id === user.id) {
+        Alert.alert("Ação inválida", "Você não pode iniciar uma conversa com você mesmo.");
+        return;
+    }
+
+    try {
+        // Opcional: Mostrar um loading específico ou usar o geral
+        // setLoading(true); 
+        
+        // Cria ou recupera a conversa
+        const conversation = await startConversation(data.product.shop.owner.id, data.product.id);
+        
+        if (conversation && conversation.id) {
+            // Redireciona para a sala de chat
+            router.push(`/(app)/chat/${conversation.id}` as any);
+        } else {
+            throw new Error("ID da conversa inválido");
+        }
+    } catch (error) {
+        console.error(error);
+        Alert.alert("Erro", "Não foi possível abrir o chat no momento.");
+    } finally {
+        // setLoading(false);
+    }
+  };
+
   const handleBuy = async () => {
     if (!data?.product) return;
 
-    // Se for em Reais, mantém o fluxo futuro de chat
+    // Se for em Reais, direciona para o chat para negociar
     if (data.product.currency !== 'CREDITS') {
-        alert("O chat será aberto para negociar o pagamento em R$.");
+        Alert.alert(
+            "Negociar Compra", 
+            "Para itens em Reais (R$), combine o pagamento e a entrega diretamente com o vendedor pelo chat.",
+            [
+                { text: "Cancelar", style: "cancel" },
+                { text: "Ir para o Chat", onPress: handleChat }
+            ]
+        );
         return;
     }
 
@@ -68,9 +109,10 @@ export default function ProductDetailsScreen() {
                     setPurchasing(false);
 
                     if (result.success) {
-                        Alert.alert("Parabéns!", "Item adquirido com sucesso! Combine a entrega no chat.");
-                        // Recarrega para atualizar o estoque visualmente
-                        loadProduct();
+                        Alert.alert("Parabéns!", "Item adquirido com sucesso! Combine a entrega no chat.", [
+                            { text: "OK", onPress: () => loadProduct() },
+                            { text: "Ir para o Chat", onPress: handleChat }
+                        ]);
                     } else {
                         Alert.alert("Erro", result.error || "Não foi possível realizar a troca.");
                     }
@@ -138,7 +180,7 @@ export default function ProductDetailsScreen() {
             {/* Header Flutuante */}
             <View className="absolute top-0 left-0 right-0 pt-12 px-4 flex-row justify-between items-center z-10">
                 <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-black/40 rounded-full items-center justify-center backdrop-blur-md">
-                    <Ionicons name="arrow-back" size={24} color="white" />
+                    <ChevronLeft size={24} color="white" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleShare} className="w-10 h-10 bg-black/40 rounded-full items-center justify-center backdrop-blur-md">
                     <Share2 size={20} color="white" />
@@ -183,10 +225,7 @@ export default function ProductDetailsScreen() {
             {/* VENDEDOR */}
             <TouchableOpacity 
                 className="flex-row items-center bg-zinc-900 p-3 rounded-xl border border-zinc-800 active:bg-zinc-800"
-                // Redireciona para a página da loja (ou do perfil do dono se preferir)
-                // Use a rota de loja se já tiver implementada: /(app)/shop/[shopId]
-                // Se não, use a rota de usuário: /(app)/users/[userId]
-                onPress={() => router.push(`/(app)/users/${product.shop.owner.id}` as any)}
+                onPress={() => router.push(`/(app)/shop/${product.shop.id}` as any)}
             >
                 <Image 
                     source={{ uri: product.shop.imageUrl || product.shop.owner.image || 'https://via.placeholder.com/50' }}
@@ -196,7 +235,7 @@ export default function ProductDetailsScreen() {
                     <Text className="text-zinc-400 text-xs">Vendido por</Text>
                     <Text className="text-white font-bold text-base">{product.shop.name}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#52525b" />
+                <ChevronRightIcon size={20} color="#52525b" />
             </TouchableOpacity>
 
             <View className="mt-6">
@@ -260,7 +299,7 @@ export default function ProductDetailsScreen() {
       <View className="absolute bottom-0 w-full bg-zinc-900 border-t border-zinc-800 px-5 py-4 pb-8 flex-row items-center gap-3">
         <TouchableOpacity 
             className="w-14 h-14 bg-zinc-800 rounded-2xl items-center justify-center border border-zinc-700 active:bg-zinc-700"
-            onPress={() => alert("Chat em desenvolvimento")}
+            onPress={handleChat} // <--- AÇÃO DO CHAT CONECTADA
         >
             <MessageCircle size={24} color="white" />
         </TouchableOpacity>

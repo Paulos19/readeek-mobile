@@ -60,6 +60,7 @@ export interface MarketProduct {
   price: number;
   currency: 'BRL' | 'CREDITS' | 'TRADE';
   address: string;
+  stock: number; // <--- Adicionado aqui!
   images: ProductImage[];
   shop?: {
       name: string;
@@ -87,6 +88,22 @@ export interface RankingUser {
   image: string | null;
   score: number;
   role: string;
+}
+
+export interface Message {
+  id: string;
+  content: string;
+  createdAt: string;
+  senderId: string;
+  sender: { id: string; name: string; image: string | null };
+}
+
+export interface Conversation {
+  id: string;
+  updatedAt: string;
+  participants: { id: string; name: string; image: string | null }[];
+  product?: { title: string; images: { url: string }[] };
+  messages: Message[]; // Apenas a última
 }
 // ==========================================================
 
@@ -530,6 +547,30 @@ export const buyProductWithCredits = async (productId: string) => {
       error: error.response?.data?.error || "Erro ao realizar compra" 
     };
   }
+};
+
+export const getMyConversations = async (): Promise<Conversation[]> => {
+  try {
+    const { data } = await api.get('/mobile/chat');
+    return data;
+  } catch (error) {
+    return [];
+  }
+};
+
+export const startConversation = async (targetUserId: string, productId?: string) => {
+  const { data } = await api.post('/mobile/chat', { targetUserId, productId });
+  return data; // Retorna objeto Conversation com ID
+};
+
+export const getMessages = async (conversationId: string): Promise<Message[]> => {
+  const { data } = await api.get(`/mobile/chat/${conversationId}/messages`);
+  return data;
+};
+
+export const sendMessage = async (conversationId: string, content: string) => {
+  const { data } = await api.post(`/mobile/chat/${conversationId}/messages`, { content });
+  return data;
 };
 
 export { PublicUserProfile };
