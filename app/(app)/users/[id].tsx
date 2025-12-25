@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   ArrowLeft, BookOpen, Users, Eye, Trophy, 
   UserPlus, UserCheck, Shield 
 } from 'lucide-react-native';
 
-import { fetchUserProfile, PublicUserProfile } from 'lib/api';
+// Importa a nova função toggleFollowUser
+import { fetchUserProfile, PublicUserProfile, toggleFollowUser } from '../../../lib/api';
 
 export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,7 +16,11 @@ export default function PublicProfileScreen() {
   
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isFollowing, setIsFollowing] = useState(false); // Mock de estado
+  
+  // Estados Locais para UI Otimista (Resposta instantânea)
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [loadingFollow, setLoadingFollow] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -28,6 +32,12 @@ export default function PublicProfileScreen() {
       setLoading(true);
       const data = await fetchUserProfile(id);
       setProfile(data);
+      
+      // Sincroniza estados locais com o dado da API
+      if (data) {
+          setIsFollowing(data.isFollowing);
+          setFollowersCount(data._count.followers);
+      }
     } catch (error) {
       console.error("Erro ao carregar perfil:", error);
     } finally {
@@ -35,12 +45,30 @@ export default function PublicProfileScreen() {
     }
   };
 
-  const handleFollowToggle = () => {
-    // Aqui você conectaria com a API real de follow
-    setIsFollowing(!isFollowing);
-    if (!isFollowing) {
-        // Feedback visual rápido
-        // Toast.show("Você agora segue este leitor");
+  const handleFollowToggle = async () => {
+    if (!profile || !id || loadingFollow) return;
+
+    // 1. Snapshot do estado anterior (para rollback em caso de erro)
+    const prevIsFollowing = isFollowing;
+    const prevFollowersCount = followersCount;
+
+    // 2. Atualização Otimista: Muda a UI antes da resposta do servidor
+    setIsFollowing(!prevIsFollowing);
+    setFollowersCount(prevIsFollowing ? prevFollowersCount - 1 : prevFollowersCount + 1);
+    setLoadingFollow(true);
+
+    try {
+        // 3. Chamada à API
+        await toggleFollowUser(id);
+        // Sucesso: O estado já está atualizado visualmente, não precisamos fazer nada.
+    } catch (error) {
+        console.error("Erro ao seguir:", error);
+        // 4. Rollback: Se der erro, volta ao estado anterior
+        setIsFollowing(prevIsFollowing);
+        setFollowersCount(prevFollowersCount);
+        Alert.alert("Erro", "Não foi possível realizar a ação. Tente novamente.");
+    } finally {
+        setLoadingFollow(false);
     }
   };
 
@@ -125,11 +153,15 @@ export default function PublicProfileScreen() {
                         </Text>
                     )}
 
-                    {/* Botão Seguir */}
+                    {/* Botão Seguir (Com lógica implementada) */}
                     <TouchableOpacity 
                         onPress={handleFollowToggle}
+                        disabled={loadingFollow}
+                        activeOpacity={0.8}
                         className={`px-8 py-3 rounded-full flex-row items-center gap-2 ${
-                            isFollowing ? 'bg-zinc-800 border border-zinc-700' : 'bg-emerald-600'
+                            isFollowing 
+                                ? 'bg-zinc-800 border border-zinc-700' 
+                                : 'bg-emerald-600 shadow-lg shadow-emerald-900/20'
                         }`}
                     >
                         {isFollowing ? (
@@ -150,7 +182,8 @@ export default function PublicProfileScreen() {
                 <View className="flex-row justify-between bg-zinc-900/80 border border-zinc-800 p-5 rounded-2xl mt-8 mb-6">
                     <StatItem value={profile._count.books} label="Livros" icon={BookOpen} />
                     <View className="w-[1px] bg-zinc-800" />
-                    <StatItem value={profile._count.followers} label="Seguidores" icon={Users} />
+                    {/* Usamos o estado local followersCount aqui para atualização instantânea */}
+                    <StatItem value={followersCount} label="Seguidores" icon={Users} />
                     <View className="w-[1px] bg-zinc-800" />
                     <StatItem value={profile._count.following} label="Seguindo" icon={Eye} />
                 </View>

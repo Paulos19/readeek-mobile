@@ -1,12 +1,4 @@
-// app/(app)/_types/user.ts (crie este arquivo se não existir)
-
-export interface PublicBook {
-  id: string;
-  title: string;
-  author: string | null;
-  coverUrl: string | null;
-  progress: number;
-}
+// app/(app)/_types/user.ts
 
 export interface PublicUserProfile {
   id: string;
@@ -15,10 +7,17 @@ export interface PublicUserProfile {
   about: string | null;
   role: string;
   displayedInsigniaIds: string[];
+  isFollowing: boolean; // <--- ADICIONE ESTE CAMPO
   _count: {
     followers: number;
     following: number;
     books: number;
   };
-  books: PublicBook[];
+  books: {
+    id: string;
+    title: string;
+    author: string | null;
+    coverUrl: string | null;
+    progress: number;
+  }[];
 }

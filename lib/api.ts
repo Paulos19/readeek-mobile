@@ -1,11 +1,9 @@
-// lib/api.ts
 import axios from 'axios';
 import { storage } from './storage';
 import { Community, CommunityPost } from 'app/(app)/_types/community';
 import { PublicUserProfile } from 'app/(app)/_types/user';
 
 // IMPORTANTE: Mude para o IP da sua máquina se estiver testando no device físico
-// Ex: http://192.168.1.15:3000/api
 const API_URL = 'https://readeek.vercel.app/api'; 
 
 export const api = axios.create({
@@ -30,6 +28,26 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// --- NOVAS FUNÇÕES DE FOLLOW E PERFIL ---
+
+export const fetchUserProfile = async (userId: string): Promise<PublicUserProfile | null> => {
+  try {
+    const { data } = await api.get(`/mobile/users/${userId}`);
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar perfil:", error);
+    return null;
+  }
+};
+
+export const toggleFollowUser = async (targetUserId: string): Promise<{ isFollowing: boolean }> => {
+  // Chama a rota POST criada no backend
+  const { data } = await api.post(`/mobile/users/${targetUserId}/follow`);
+  return data;
+};
+
+// --- FIM DAS NOVAS FUNÇÕES ---
 
 export const syncProgress = async (bookId: string, cfi: string, percentage: number) => {
   try {
@@ -258,7 +276,6 @@ export const socialService = {
     return res.data;
   },
 
-  // Busca de usuários para menções
   searchUsers: async (query: string) => {
     try {
         const res = await api.get('/mobile/users/search', { params: { query } });
@@ -269,11 +286,9 @@ export const socialService = {
     }
   },
 
-  // Criação de Post com suporte a Imagem (Multipart)
   createPost: async (data: { content: string; type: 'POST' | 'EXCERPT' | 'CHALLENGE'; bookId?: string; imageUri?: string }) => {
     const { content, type, bookId, imageUri } = data;
 
-    // Se tiver imagem, usa FormData (Multipart)
     if (imageUri) {
         const formData = new FormData();
         formData.append('content', content);
@@ -295,7 +310,6 @@ export const socialService = {
         });
         return res.data;
     } else {
-        // Postagem apenas de texto/citação (JSON mais leve)
         const res = await api.post('/mobile/social/posts', { content, type, bookId });
         return res.data;
     }
@@ -316,7 +330,6 @@ export const socialService = {
     return res.data;
   },
 
-  // Comentários do Feed Social
   getComments: async (postId: string) => {
     const res = await api.get(`/mobile/social/posts/${postId}/comments`);
     return res.data;
@@ -333,17 +346,6 @@ export const socialService = {
   toggleCommentLike: async (commentId: string) => {
     const res = await api.post(`/mobile/social/comments/${commentId}/react`);
     return res.data; 
-  }
-};
-
-export const fetchUserProfile = async (userId: string): Promise<PublicUserProfile | null> => {
-  try {
-    // Reutilizando sua instância configurada do axios/fetch que já injeta o token
-    const { data } = await api.get(`/mobile/users/${userId}`);
-    return data;
-  } catch (error) {
-    console.error("Erro ao buscar perfil:", error);
-    return null;
   }
 };
 
