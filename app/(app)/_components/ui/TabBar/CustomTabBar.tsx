@@ -1,61 +1,44 @@
-import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Dimensions, Keyboard, Platform } from 'react-native';
+import React from 'react';
+import { View, TouchableOpacity, Dimensions, Platform, Keyboard } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePathname } from 'expo-router'; // Importação essencial para saber onde estamos
 import { Home, BookOpen, User, Users, Store } from 'lucide-react-native';
-import { usePathname } from 'expo-router'; 
 import { TabIcon } from './TabIcon';
 import { CenterBookButton } from './CenterBookButton';
 import { TabBarBackground } from './TabBarBackground';
-import { useReadingStore } from '../../../../../stores/useReadingStore';
+import { useReadingStore } from '../../../../../stores/useReadingStore'; // Ajuste o caminho conforme sua estrutura
 
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { lastRead } = useReadingStore();
   const { width: screenWidth } = Dimensions.get('window');
   const pathname = usePathname();
-  
-  // Estado local para visibilidade do teclado
-  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSubscription = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
-
-  // === 1. LÓGICA DE OCULTAÇÃO ===
-  
+  // === 1. LÓGICA DE OCULTAÇÃO (NOVA) ===
+  // Se a rota atual contiver qualquer uma dessas strings, a TabBar não será renderizada.
   const HIDDEN_ROUTES = [
-    '/product',      
-    '/read',         
-    '/shop/create',  
-    '/shop/',        
-    '/users',        
-    '/ranking'       
+    '/read/',       // Leitor de Livros
+    '/chat/',       // Sala de Chat
+    '/product/',    // Detalhes do Produto
+    '/shop/create', // Criar Loja/Produto
+    '/ranking',     // Tela de Ranking (Opcional, se quiser Fullscreen)
   ];
 
-  const isHiddenRoute = HIDDEN_ROUTES.some(route => pathname.includes(route));
+  const shouldHideByPath = HIDDEN_ROUTES.some(route => pathname.includes(route));
 
+  // Verifica também se foi escondido manualmente nas options da rota (backup)
   const focusedRoute = state.routes[state.index];
   const focusedDescriptor = descriptors[focusedRoute.key];
-  const isHiddenByOptions = focusedDescriptor.options.tabBarStyle && (focusedDescriptor.options.tabBarStyle as any).display === 'none';
+  const shouldHideByOptions = focusedDescriptor.options.tabBarStyle && (focusedDescriptor.options.tabBarStyle as any).display === 'none';
 
-  if (isHiddenRoute || isKeyboardVisible || isHiddenByOptions) {
-      return null;
-  }
+  // Se deve esconder, retorna null (não renderiza nada)
+  if (shouldHideByPath || shouldHideByOptions) return null;
 
-  // === 2. CONFIGURAÇÃO DAS ABAS ===
-
+  // === 2. CONFIGURAÇÃO ===
   const LEFT_ROUTES = ['dashboard', 'library'];
-  const RIGHT_ROUTES = ['shop', 'profile']; 
+  // Se você tiver uma rota de 'shop' ou 'community' como aba, ajuste aqui:
+  const RIGHT_ROUTES = ['community', 'profile']; 
 
   const TAB_CONFIG: Record<string, { icon: any }> = {
     dashboard: { icon: Home },
@@ -66,13 +49,14 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   };
 
   const renderTab = (routeName: string, index: number) => {
+    // Busca a rota correspondente no estado de navegação
     const route = state.routes.find(r => r.name === routeName);
-    if (!route) return null;
+    if (!route) return null; // Se a rota não existir nas abas, ignora
 
     const { options } = descriptors[route.key];
     const isFocused = state.routes[state.index].name === routeName;
     
-    // Configuração do ícone
+    // Fallback seguro para ícone
     const config = TAB_CONFIG[routeName] || { icon: Home };
 
     const onPress = () => {
@@ -98,11 +82,10 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         className="flex-1 items-center justify-center h-full"
         activeOpacity={1}
       >
-        {/* CORREÇÃO: Passando as props corretas para TabIcon */}
         <TabIcon 
           isFocused={isFocused}
           Icon={config.icon}
-          color="#10b981" 
+          color="#10b981"
         />
       </TouchableOpacity>
     );
@@ -110,15 +93,15 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   const handleCenterPress = () => {
     if (lastRead?.id) {
-      // Ajuste o nome da rota conforme seu File System. Ex: '(reader)/read/[bookId]/index'
-      // Se der erro de navegação, use apenas navigation.navigate('read', { ... }) se a rota for nomeada assim
-      // ou router.push se preferir a API do expo-router.
-      navigation.navigate('read/[bookId]/index', { bookId: lastRead.id });
+        // Redireciona para o leitor com o ID do livro salvo
+        // Nota: Como '/read/' está na lista HIDDEN_ROUTES, a TabBar sumirá ao entrar lá.
+        navigation.navigate('read/[bookId]/index', { bookId: lastRead.id });
     } else {
-      navigation.navigate('library');
+        navigation.navigate('library');
     }
   };
 
+  // Dimensões do efeito flutuante
   const TAB_HEIGHT = 65;
   const MARGIN_HORIZONTAL = 20;
   const TAB_WIDTH = screenWidth - (MARGIN_HORIZONTAL * 2);
@@ -129,6 +112,8 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
       className="absolute bottom-0 w-full items-center"
       style={{ paddingBottom: insets.bottom + 10 }}
     >
+      
+      {/* Container Flutuante */}
       <View 
         style={{ 
           width: TAB_WIDTH, 
@@ -141,15 +126,18 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
           elevation: 10,
         }}
       >
+        {/* Fundo SVG */}
         <View style={{ borderRadius: 35, overflow: 'hidden', height: TAB_HEIGHT, width: '100%' }}>
             <TabBarBackground width={TAB_WIDTH} height={TAB_HEIGHT} />
         </View>
 
+        {/* Ícones */}
         <View className="absolute inset-0 flex-row items-center justify-between px-2">
             <View className="flex-row flex-1 justify-evenly h-full">
                 {LEFT_ROUTES.map((route, i) => renderTab(route, i))}
             </View>
 
+            {/* Espaço Vazio Central */}
             <View className="w-[70px]" pointerEvents="box-none" /> 
 
             <View className="flex-row flex-1 justify-evenly h-full">
@@ -158,6 +146,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         </View>
       </View>
 
+      {/* Botão Central Flutuante */}
       <View className="absolute" style={{ bottom: insets.bottom + 10 + 25 }}>
          <CenterBookButton onPress={handleCenterPress} />
       </View>
