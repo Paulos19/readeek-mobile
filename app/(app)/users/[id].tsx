@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { fetchUserProfile, PublicUserProfile } from '../../../lib/api'; // Ajuste o caminho conforme necessário
-import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { 
+  ArrowLeft, BookOpen, Users, Eye, Trophy, 
+  UserPlus, UserCheck, Shield 
+} from 'lucide-react-native';
+
+import { fetchUserProfile, PublicUserProfile } from 'lib/api';
 
 export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFollowing, setIsFollowing] = useState(false); // Mock de estado
 
   useEffect(() => {
     loadProfile();
@@ -17,138 +24,216 @@ export default function PublicProfileScreen() {
 
   const loadProfile = async () => {
     if (!id) return;
-    setLoading(true);
-    const data = await fetchUserProfile(id);
-    setProfile(data);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const data = await fetchUserProfile(id);
+      setProfile(data);
+    } catch (error) {
+      console.error("Erro ao carregar perfil:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFollowToggle = () => {
+    // Aqui você conectaria com a API real de follow
+    setIsFollowing(!isFollowing);
+    if (!isFollowing) {
+        // Feedback visual rápido
+        // Toast.show("Você agora segue este leitor");
+    }
   };
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-background-light dark:bg-background-dark">
-        <ActivityIndicator size="large" color="#4F46E5" />
+      <View className="flex-1 bg-black justify-center items-center">
+        <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
 
   if (!profile) {
     return (
-      <View className="flex-1 justify-center items-center bg-background-light dark:bg-background-dark">
-        <Text className="text-text-secondary dark:text-gray-400">Usuário não encontrado.</Text>
+      <View className="flex-1 bg-black justify-center items-center px-6">
+        <View className="w-20 h-20 bg-zinc-900 rounded-full items-center justify-center mb-4">
+            <Users size={32} color="#52525b" />
+        </View>
+        <Text className="text-white text-xl font-bold mb-2">Usuário não encontrado</Text>
+        <Text className="text-zinc-500 text-center mb-8">
+          O perfil pode estar privado ou não existir mais.
+        </Text>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          className="bg-zinc-800 px-8 py-3 rounded-full"
+        >
+          <Text className="text-white font-bold">Voltar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background-light dark:bg-background-dark">
+    <View className="flex-1 bg-black">
+      <StatusBar barStyle="light-content" />
       <Stack.Screen options={{ headerShown: false }} />
-      
-      {/* Header com botão voltar */}
-      <View className="px-4 py-2 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()} className="p-2">
-            <Ionicons name="arrow-back" size={24} className="text-text-primary dark:text-white" />
-        </TouchableOpacity>
-        <Text className="text-lg font-bold ml-4 text-text-primary dark:text-white">Perfil</Text>
-      </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Info do Usuário */}
-        <View className="items-center px-6 pt-4">
-          <Image
-            source={{ uri: profile.image || 'https://ui-avatars.com/api/?name=' + profile.name }}
-            className="w-24 h-24 rounded-full border-2 border-primary"
-          />
-          <Text className="text-2xl font-bold mt-3 text-text-primary dark:text-white">{profile.name}</Text>
-          <Text className="text-sm text-primary uppercase font-bold mt-1">{profile.role}</Text>
-          
-          {/* Bio */}
-          {profile.about && (
-            <Text className="text-center text-text-secondary dark:text-gray-300 mt-3 px-4">
-              {profile.about}
-            </Text>
-          )}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        
+        {/* === HEADER COM GRADIENTE === */}
+        <View className="relative">
+            <LinearGradient
+                colors={['#064e3b', '#022c22', '#000000']} // Verde Esmeralda escuro para preto
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                className="h-64 w-full pt-12 px-4"
+            >
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    className="w-10 h-10 items-center justify-center rounded-full bg-black/20 backdrop-blur-md"
+                >
+                    <ArrowLeft size={24} color="white" />
+                </TouchableOpacity>
+            </LinearGradient>
 
-          {/* Stats */}
-          <View className="flex-row mt-6 w-full justify-around border-y border-gray-200 dark:border-gray-800 py-4">
-            <View className="items-center">
-              <Text className="font-bold text-lg text-text-primary dark:text-white">{profile._count.books}</Text>
-              <Text className="text-xs text-text-secondary dark:text-gray-400">Livros</Text>
-            </View>
-            <View className="items-center">
-              <Text className="font-bold text-lg text-text-primary dark:text-white">{profile._count.followers}</Text>
-              <Text className="text-xs text-text-secondary dark:text-gray-400">Seguidores</Text>
-            </View>
-            <View className="items-center">
-              <Text className="font-bold text-lg text-text-primary dark:text-white">{profile._count.following}</Text>
-              <Text className="text-xs text-text-secondary dark:text-gray-400">Seguindo</Text>
-            </View>
-          </View>
+            {/* === INFO DO PERFIL (Sobreposto) === */}
+            <View className="px-6 -mt-24">
+                <View className="items-center">
+                    {/* Avatar */}
+                    <View className="relative shadow-2xl shadow-black">
+                        <View className="w-32 h-32 rounded-full p-1 bg-black">
+                            <Image
+                                source={{ uri: profile.image || `https://ui-avatars.com/api/?name=${profile.name}&background=10b981&color=fff` }}
+                                className="w-full h-full rounded-full bg-zinc-800"
+                            />
+                        </View>
+                        {profile.role === 'ADMIN' && (
+                            <View className="absolute bottom-2 right-2 bg-blue-500 p-1.5 rounded-full border-4 border-black">
+                                <Shield size={14} color="white" fill="white" />
+                            </View>
+                        )}
+                    </View>
 
-          {/* Botão Seguir (Visual apenas) */}
-          <TouchableOpacity 
-            className="mt-6 bg-primary w-full py-3 rounded-xl items-center shadow-sm active:opacity-90"
-            onPress={() => alert("Funcionalidade em breve!")}
-          >
-            <Text className="text-white font-bold text-base">Seguir</Text>
-          </TouchableOpacity>
+                    {/* Nome e Bio */}
+                    <Text className="text-white text-2xl font-bold mt-4 text-center">{profile.name}</Text>
+                    <Text className="text-emerald-500 text-xs font-bold uppercase tracking-widest mt-1 mb-4">
+                        {profile.role === 'ADMIN' ? 'Administrador' : 'Leitor'}
+                    </Text>
+
+                    {profile.about && (
+                        <Text className="text-zinc-400 text-center text-sm leading-5 mb-6 px-4">
+                            {profile.about}
+                        </Text>
+                    )}
+
+                    {/* Botão Seguir */}
+                    <TouchableOpacity 
+                        onPress={handleFollowToggle}
+                        className={`px-8 py-3 rounded-full flex-row items-center gap-2 ${
+                            isFollowing ? 'bg-zinc-800 border border-zinc-700' : 'bg-emerald-600'
+                        }`}
+                    >
+                        {isFollowing ? (
+                            <>
+                                <UserCheck size={18} color="#a1a1aa" />
+                                <Text className="text-zinc-300 font-bold">Seguindo</Text>
+                            </>
+                        ) : (
+                            <>
+                                <UserPlus size={18} color="white" />
+                                <Text className="text-white font-bold">Seguir</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+                {/* === STATS === */}
+                <View className="flex-row justify-between bg-zinc-900/80 border border-zinc-800 p-5 rounded-2xl mt-8 mb-6">
+                    <StatItem value={profile._count.books} label="Livros" icon={BookOpen} />
+                    <View className="w-[1px] bg-zinc-800" />
+                    <StatItem value={profile._count.followers} label="Seguidores" icon={Users} />
+                    <View className="w-[1px] bg-zinc-800" />
+                    <StatItem value={profile._count.following} label="Seguindo" icon={Eye} />
+                </View>
+            </View>
         </View>
 
-        {/* Seção de Insígnias (Placeholder simples) */}
-        {profile.displayedInsigniaIds.length > 0 && (
-            <View className="px-6 mt-8">
-                <Text className="text-lg font-bold mb-3 text-text-primary dark:text-white">Insígnias</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-                    {/* Aqui você renderizaria os SVGs das insígnias baseado nos IDs */}
-                    {profile.displayedInsigniaIds.map((id: React.Key | null | undefined, index: any) => (
-                        <View key={id} className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-full mr-3 items-center justify-center">
-                            <Text className="text-xs">🏆</Text>
+        {/* === INSÍGNIAS === */}
+        {profile.displayedInsigniaIds && profile.displayedInsigniaIds.length > 0 && (
+            <View className="mb-8 px-6">
+                <View className="flex-row items-center gap-2 mb-4">
+                    <Trophy size={18} color="#fbbf24" />
+                    <Text className="text-zinc-200 font-bold text-lg">Conquistas</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {profile.displayedInsigniaIds.map((id, i) => (
+                        <View key={i} className="mr-3 w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-xl items-center justify-center">
+                            <Text className="text-2xl">🏅</Text>
                         </View>
                     ))}
                 </ScrollView>
             </View>
         )}
 
-        {/* Lista de Livros */}
-        <View className="px-6 mt-8">
-          <Text className="text-lg font-bold mb-4 text-text-primary dark:text-white">Biblioteca ({profile.books.length})</Text>
-          
-          {profile.books.length === 0 ? (
-            <Text className="text-text-secondary dark:text-gray-400 italic">Nenhum livro público.</Text>
-          ) : (
-            profile.books.map((book) => (
-              <View key={book.id} className="flex-row mb-4 bg-white dark:bg-gray-900 p-3 rounded-xl shadow-sm">
-                {/* Capa */}
-                <Image 
-                    source={{ uri: book.coverUrl || 'https://via.placeholder.com/100x150' }}
-                    className="w-16 h-24 rounded-md"
-                    resizeMode="cover"
-                />
-                
-                {/* Detalhes + Barra de Progresso */}
-                <View className="flex-1 ml-4 justify-center">
-                    <Text numberOfLines={2} className="font-bold text-base text-text-primary dark:text-white">
-                        {book.title}
-                    </Text>
-                    <Text numberOfLines={1} className="text-sm text-text-secondary dark:text-gray-400 mb-2">
-                        {book.author || "Autor Desconhecido"}
-                    </Text>
-
-                    {/* Barra de Progresso Visual */}
-                    <View className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <View 
-                            className="h-full bg-green-500 rounded-full" 
-                            style={{ width: `${book.progress}%` }} 
-                        />
-                    </View>
-                    <Text className="text-xs text-right mt-1 text-text-secondary dark:text-gray-400">
-                        {book.progress}% lido
-                    </Text>
+        {/* === BIBLIOTECA === */}
+        <View className="px-6">
+            <View className="flex-row items-center gap-2 mb-4">
+                <BookOpen size={18} color="#10b981" />
+                <Text className="text-zinc-200 font-bold text-lg">Biblioteca Pública</Text>
+                <View className="bg-zinc-800 px-2 py-0.5 rounded text-xs">
+                    <Text className="text-zinc-400 text-xs">{profile.books.length}</Text>
                 </View>
-              </View>
-            ))
-          )}
+            </View>
+
+            {profile.books.length === 0 ? (
+                <View className="items-center py-10 border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/30">
+                    <BookOpen size={32} color="#3f3f46" />
+                    <Text className="text-zinc-500 mt-3">Nenhum livro visível</Text>
+                </View>
+            ) : (
+                <View className="gap-3">
+                    {profile.books.map((book) => (
+                        <View key={book.id} className="flex-row bg-zinc-900 border border-zinc-800 p-3 rounded-xl">
+                            {/* Capa */}
+                            <View className="w-12 h-16 bg-zinc-800 rounded shadow-sm overflow-hidden mr-3">
+                                {book.coverUrl ? (
+                                    <Image source={{ uri: book.coverUrl }} className="w-full h-full" />
+                                ) : (
+                                    <View className="flex-1 items-center justify-center"><BookOpen size={12} color="#52525b"/></View>
+                                )}
+                            </View>
+                            
+                            {/* Info & Progresso */}
+                            <View className="flex-1 justify-center">
+                                <Text className="text-zinc-200 font-bold text-sm mb-1" numberOfLines={1}>{book.title}</Text>
+                                <Text className="text-zinc-500 text-xs mb-2" numberOfLines={1}>{book.author || "Autor desconhecido"}</Text>
+                                
+                                {/* Barra de Progresso */}
+                                <View className="flex-row items-center gap-2">
+                                    <View className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                        <View 
+                                            className="h-full bg-emerald-600 rounded-full" 
+                                            style={{ width: `${book.progress || 0}%` }} 
+                                        />
+                                    </View>
+                                    <Text className="text-zinc-400 text-[10px] font-medium w-8 text-right">{book.progress}%</Text>
+                                </View>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            )}
         </View>
+
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
+
+// Subcomponente de Estatísticas para limpeza
+const StatItem = ({ value, label, icon: Icon }: any) => (
+    <View className="items-center flex-1">
+        <Icon size={20} color="#10b981" style={{ marginBottom: 4, opacity: 0.8 }} />
+        <Text className="text-white font-bold text-lg">{value}</Text>
+        <Text className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider">{label}</Text>
+    </View>
+);
