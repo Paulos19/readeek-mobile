@@ -1,95 +1,163 @@
-import React, { useMemo } from 'react';
-import { View, Text, Image, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { Link, useRouter } from 'expo-router';
+import { ShoppingBag, Coins, Play, BookOpen, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { Bell } from 'lucide-react-native'; // Opcional: ícone para enriquecer o header
+import MaskedView from '@react-native-masked-view/masked-view';
+import { Book } from '../_types/book';
 
-// URL BASE DA SUA API
-const API_URL = 'https://readeek.vercel.app'; 
-
-interface Props {
-  name: string | null;
-  image?: string | null;
+interface GreetingHeaderProps {
+  user: {
+    name: string | null;
+    image: string | null;
+    credits?: number;
+  } | null;
+  lastReadBook?: Book | null;
+  onContinueReading?: (book: Book) => void;
 }
 
-export const GreetingHeader = ({ name, image }: Props) => {
+export const GreetingHeader = ({ user, lastReadBook, onContinueReading }: GreetingHeaderProps) => {
   const router = useRouter();
 
-  // 1. Lógica de Saudação Dinâmica
-  const greetingText = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return 'Bom dia';
-    if (hour >= 12 && hour < 18) return 'Boa tarde';
-    return 'Boa noite';
-  }, []);
+  if (!user) return null;
 
-  const displayName = name ? name.split(' ')[0] : 'Leitor';
-  const initial = displayName[0]?.toUpperCase() || 'L';
+  const displayName = user.name ? user.name.split(' ')[0] : 'Leitor';
 
-  // 2. Tratamento da Imagem
-  const getAvatarSource = (imgUrl?: string | null) => {
-    if (!imgUrl) return null;
-    
-    // URL externa completa
-    if (imgUrl.startsWith('http')) return { uri: imgUrl };
-    
-    // URL relativa (Assets locais ou API)
-    return { uri: `${API_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}` };
-  };
-
-  const imageSource = getAvatarSource(image);
-
-  // 3. Ação de Navegação
-  const handleProfilePress = () => {
-    // router.navigate muda para a Tab existente em vez de empilhar uma nova tela
-    router.navigate('profile'); 
-  };
+  // Componente de Texto Gradiente
+  const GradientText = ({ text, style }: { text: string, style?: any }) => (
+    <MaskedView
+      maskElement={<Text className="text-3xl font-black text-white" style={style}>{text}</Text>}
+    >
+      <LinearGradient
+        colors={['#ffffff', '#34d399', '#10b981']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+      >
+        <Text className="text-3xl font-black opacity-0" style={style}>{text}</Text>
+      </LinearGradient>
+    </MaskedView>
+  );
 
   return (
-    <View className="px-6 pt-2 mb-6">
-      <LinearGradient
-        colors={['#065f46', '#022c22']} // Emerald 800 -> 950
-        start={{ x: 0, y: 0 }} 
-        end={{ x: 1, y: 1 }}
-        className="w-full p-6 rounded-[32px] border border-emerald-500/20 relative overflow-hidden shadow-2xl shadow-emerald-900/40"
-      >
-        {/* Efeitos de Fundo (Decorativos) */}
-        <View className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl" />
-        <View className="absolute -left-10 -bottom-10 w-40 h-40 bg-emerald-400/5 rounded-full blur-2xl" />
-
-        <View className="flex-row justify-between items-center z-10">
-          <View>
-            <Text className="text-emerald-300 text-xs font-bold uppercase tracking-[0.2em] mb-1 opacity-80">
-              {greetingText},
-            </Text>
-            <Text className="text-white font-black text-3xl leading-9 drop-shadow-sm">
-              {displayName}
-            </Text>
-          </View>
-
-          {/* Área Interativa do Avatar */}
-          <TouchableOpacity 
-            onPress={handleProfilePress}
-            activeOpacity={0.8}
-            className="w-14 h-14 rounded-full border-2 border-emerald-500/30 p-0.5 bg-black/20 shadow-lg"
-          >
-            <View className="w-full h-full rounded-full overflow-hidden bg-zinc-800 items-center justify-center">
-              {imageSource ? (
-                <Image 
-                  source={imageSource} 
-                  className="w-full h-full" 
-                  resizeMode="cover"
-                  onError={(e) => console.log("Erro imagem:", e.nativeEvent.error)}
-                />
-              ) : (
-                <View className="w-full h-full items-center justify-center bg-emerald-600">
-                  <Text className="text-white font-bold text-xl">{initial}</Text>
+    <View className="pt-6 pb-4">
+      {/* === CABEÇALHO: PERFIL E ECONOMIA === */}
+      <View className="px-6 flex-row justify-between items-start mb-8">
+        <Link href="/(app)/profile" asChild>
+            <TouchableOpacity className="flex-row items-center gap-4">
+                <View className="relative w-14 h-14 rounded-full border-2 border-emerald-500/20 p-0.5 shadow-[0_0_15px_rgba(16,185,129,0.3)] bg-zinc-900">
+                    <Image 
+                        source={{ uri: user.image || `https://ui-avatars.com/api/?name=${displayName}&background=065f46&color=fff` }} 
+                        className="w-full h-full rounded-full"
+                    />
                 </View>
-              )}
+                <View>
+                    <Text className="text-zinc-400 text-[10px] font-bold uppercase tracking-[2px] mb-0.5">Bem-vindo(a)</Text>
+                    <GradientText text={displayName} />
+                </View>
+            </TouchableOpacity>
+        </Link>
+
+        <View className="flex-row gap-3 mt-1.5">
+            <View className="flex-row items-center bg-zinc-900/80 px-3 py-1.5 rounded-full border border-zinc-800">
+                <Coins size={12} color="#fbbf24" style={{ marginRight: 6 }} />
+                <Text className="text-amber-400 font-bold text-xs">{user.credits ?? 0}</Text>
             </View>
-          </TouchableOpacity>
+            <Link href="/(app)/shop" asChild>
+                <TouchableOpacity className="w-8 h-8 bg-zinc-900/80 rounded-full items-center justify-center border border-zinc-800 active:bg-zinc-800">
+                    <ShoppingBag size={14} color="white" />
+                </TouchableOpacity>
+            </Link>
         </View>
-      </LinearGradient>
+      </View>
+
+      {/* === CARD "CONTINUAR LENDO" === */}
+      <View className="px-6">
+        {lastReadBook ? (
+            <TouchableOpacity 
+                activeOpacity={0.95}
+                onPress={() => onContinueReading && onContinueReading(lastReadBook)}
+                className="w-full h-44 rounded-[32px] overflow-hidden relative shadow-2xl shadow-emerald-900/20 border border-white/5"
+            >
+                {/* 1. Imagem de Fundo (Capa com Blur) */}
+                <Image 
+                    source={{ uri: lastReadBook.coverUrl || undefined }}
+                    className="absolute w-full h-full opacity-40 scale-150"
+                    blurRadius={30}
+                />
+                
+                {/* 2. Overlay Escuro */}
+                <LinearGradient
+                    colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)', '#09090b']}
+                    className="absolute w-full h-full"
+                />
+
+                {/* 3. Conteúdo do Card */}
+                <View className="flex-1 flex-row items-center p-5">
+                    {/* Capa Física */}
+                    <View className="shadow-2xl shadow-black/80 mr-5">
+                        <Image 
+                            source={{ uri: lastReadBook.coverUrl || undefined }}
+                            className="w-24 h-36 rounded-xl border border-white/10"
+                            resizeMode="cover"
+                        />
+                    </View>
+
+                    {/* Informações e Controles */}
+                    {/* CORREÇÃO AQUI: Adicionado pr-14 para o texto não bater no botão play */}
+                    <View className="flex-1 justify-center h-full py-1 pr-14">
+                        <View className="flex-row items-center mb-2">
+                            <View className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-2 animate-pulse" />
+                            <Text className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest">
+                                Em andamento
+                            </Text>
+                        </View>
+
+                        <Text numberOfLines={2} className="text-white font-bold text-xl leading-6 mb-1 shadow-black">
+                            {lastReadBook.title}
+                        </Text>
+                        <Text numberOfLines={1} className="text-zinc-400 text-xs font-medium mb-4">
+                            {lastReadBook.author || "Autor Desconhecido"}
+                        </Text>
+
+                        {/* Barra de Progresso */}
+                        <View>
+                            <View className="flex-row justify-between mb-1.5">
+                                <Text className="text-zinc-300 text-[10px] font-bold">{Math.round(lastReadBook.progress || 0)}%</Text>
+                            </View>
+                            <View className="h-2 w-full bg-white/10 rounded-full overflow-hidden border border-white/5">
+                                <LinearGradient
+                                    colors={['#10b981', '#34d399']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    className="h-full rounded-full"
+                                    style={{ width: `${lastReadBook.progress || 0}%` }}
+                                />
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Botão Play Flutuante (Absolute) */}
+                    <View className="absolute bottom-4 right-4 bg-emerald-500 w-12 h-12 rounded-full items-center justify-center shadow-lg shadow-emerald-500/30 border border-white/20">
+                        <Play size={20} color="white" fill="white" style={{ marginLeft: 3 }} />
+                    </View>
+                </View>
+            </TouchableOpacity>
+        ) : (
+            // Placeholder
+            <Link href="/(app)/library" asChild>
+                <TouchableOpacity className="w-full h-32 bg-zinc-900/50 border-2 border-zinc-800 border-dashed rounded-[24px] items-center justify-center flex-row gap-3 active:bg-zinc-900/80">
+                    <View className="w-10 h-10 bg-zinc-800 rounded-full items-center justify-center">
+                        <BookOpen size={18} color="#71717a" />
+                    </View>
+                    <View>
+                        <Text className="text-zinc-300 font-bold text-base">Sua estante está vazia</Text>
+                        <Text className="text-zinc-500 text-xs">Toque para começar uma nova leitura</Text>
+                    </View>
+                    <ChevronRight size={20} color="#52525b" />
+                </TouchableOpacity>
+            </Link>
+        )}
+      </View>
     </View>
   );
 };

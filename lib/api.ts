@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { storage } from './storage';
-import { Community, CommunityPost } from 'app/(app)/_types/community';
 import { PublicUserProfile } from 'app/(app)/_types/user';
+import { Book } from 'app/(app)/_types/book';
 
 // IMPORTANTE: Mude para o IP da sua máquina se estiver testando no device físico
 const API_URL = 'https://readeek.vercel.app/api'; 
@@ -20,13 +20,66 @@ export interface Highlight {
     color: string;
 }
 
+export interface ProductImage {
+  id: string;
+  url: string;
+}
+
+export interface ShopData {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+}
+
+export interface ProductDetailsResponse {
+  product: MarketProduct & {
+    shop: {
+      id: string;
+      name: string;
+      imageUrl: string | null;
+      owner: { id: string; name: string; image: string | null };
+    };
+  };
+  relatedProducts: MarketProduct[];
+  communityBooks: Book[]; // Reutiliza seu tipo Book existente
+}
+
+export interface MarketProduct {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  currency: 'BRL' | 'CREDITS' | 'TRADE';
+  address: string;
+  images: ProductImage[];
+  shop?: {
+      name: string;
+      imageUrl: string | null;
+  };
+}
+
+export interface MarketShop {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  owner: { name: string };
+}
+
+export interface MarketplaceFeed {
+  creditShop: MarketProduct[];
+  recentDrops: MarketProduct[];
+  shops: MarketShop[];
+}
+
+// === ADICIONE ISTO: Interface para o Ranking de Usuários ===
 export interface RankingUser {
   id: string;
   name: string;
   image: string | null;
-  score: number; // Mudou de 'credits' para 'score'
+  score: number;
   role: string;
 }
+// ==========================================================
 
 // Interceptor para injetar o token automaticamente
 api.interceptors.request.use(async (config) => {
@@ -37,25 +90,17 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// --- NOVAS FUNÇÕES DE FOLLOW E PERFIL ---
-
-export const fetchUserProfile = async (userId: string): Promise<PublicUserProfile | null> => {
+// === ADICIONE ISTO: Função para buscar o Ranking ===
+export const getRanking = async (): Promise<RankingUser[]> => {
   try {
-    const { data } = await api.get(`/mobile/users/${userId}`);
+    const { data } = await api.get('/mobile/ranking');
     return data;
   } catch (error) {
-    console.error("Erro ao buscar perfil:", error);
-    return null;
+    console.error("Erro ao buscar ranking:", error);
+    return [];
   }
 };
-
-export const toggleFollowUser = async (targetUserId: string): Promise<{ isFollowing: boolean }> => {
-  // Chama a rota POST criada no backend
-  const { data } = await api.post(`/mobile/users/${targetUserId}/follow`);
-  return data;
-};
-
-// --- FIM DAS NOVAS FUNÇÕES ---
+// ===================================================
 
 export const syncProgress = async (bookId: string, cfi: string, percentage: number) => {
   try {
@@ -357,13 +402,101 @@ export const socialService = {
   }
 };
 
-export const getRanking = async (): Promise<RankingUser[]> => {
+export const fetchUserProfile = async (userId: string): Promise<PublicUserProfile | null> => {
   try {
-    const { data } = await api.get('/mobile/ranking');
+    const { data } = await api.get(`/mobile/users/${userId}`);
     return data;
   } catch (error) {
-    console.error("Erro ao buscar ranking:", error);
-    return [];
+    console.error("Erro ao buscar perfil:", error);
+    return null;
+  }
+};
+
+export const getMarketplaceFeed = async (query?: string): Promise<MarketplaceFeed | null> => {
+  try {
+    const params = query ? { q: query } : {};
+    const { data } = await api.get('/mobile/marketplace/feed', { params });
+    return data;
+  } catch (error) {
+    console.error("Erro ao carregar marketplace:", error);
+    return null;
+  }
+};
+
+export const getMyShop = async (): Promise<ShopData | null> => {
+  try {
+    const { data } = await api.get('/mobile/marketplace/shop');
+    return data.shop;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const createShop = async (name: string, description: string, imageUri?: string) => {
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('description', description);
+
+  if (imageUri) {
+    const filename = imageUri.split('/').pop() || 'shop.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+    
+    formData.append('image', {
+      uri: imageUri,
+      name: filename,
+      type,
+    } as any);
+  }
+
+  const res = await api.post('/mobile/marketplace/shop', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+};
+
+export const createProduct = async (data: {
+  title: string;
+  description: string;
+  price: string;
+  currency: 'BRL' | 'CREDITS';
+  address: string;
+  stock: string;
+  imageUri?: string;
+}) => {
+  const formData = new FormData();
+  formData.append('title', data.title);
+  formData.append('description', data.description);
+  formData.append('price', data.price);
+  formData.append('currency', data.currency);
+  formData.append('address', data.address);
+  formData.append('stock', data.stock);
+
+  if (data.imageUri) {
+    const filename = data.imageUri.split('/').pop() || 'product.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+    
+    formData.append('image', {
+      uri: data.imageUri,
+      name: filename,
+      type,
+    } as any);
+  }
+
+  const res = await api.post('/mobile/marketplace/products', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+};
+
+export const getProductDetails = async (id: string): Promise<ProductDetailsResponse | null> => {
+  try {
+    const { data } = await api.get(`/mobile/marketplace/products/${id}`);
+    return data;
+  } catch (error) {
+    console.error("Erro ao carregar produto:", error);
+    return null;
   }
 };
 

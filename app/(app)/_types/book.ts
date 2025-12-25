@@ -8,6 +8,7 @@ export interface UserProfile {
 }
 
 export interface Book {
+  updatedAt: any;
   id: string;
   title: string;
   author: string | null;
