@@ -2,10 +2,41 @@ import React from 'react';
 import { View, TouchableOpacity, Text } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePathname } from 'expo-router'; // Importação necessária
 import { Home, BookOpen, Users, User, MessageCircle } from 'lucide-react-native';
 
 export function StandardTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname(); // Hook para pegar a URL atual
+
+  // --- 1. LÓGICA DE OCULTAÇÃO ---
+  
+  // Identifica a rota e opções ativas no momento
+  const focusedRoute = state.routes[state.index];
+  const focusedDescriptor = descriptors[focusedRoute.key];
+  const focusedOptions = focusedDescriptor.options;
+
+  // Verifica se nas options da rota foi definido tabBarStyle: { display: 'none' }
+  const shouldHideByOptions = (focusedOptions.tabBarStyle as any)?.display === 'none';
+
+  // Verifica manualmente por rotas específicas na URL
+  // Isso garante que a barra suma em sub-rotas profundas
+  const hiddenRoutesSegments = [
+    '/read/',       // Leitor de Livros
+    '/chat/',       // Chat
+    '/product/',    // Detalhes de Produto
+    '/shop/create', // Criar Loja
+    '/ranking'      // Ranking (opcional)
+  ];
+  
+  const shouldHideByPath = hiddenRoutesSegments.some(segment => pathname.includes(segment));
+
+  // SE DEVE ESCONDER, NÃO RENDERIZA NADA
+  if (shouldHideByOptions || shouldHideByPath) {
+    return null;
+  }
+
+  // --- 2. CONFIGURAÇÃO DA UI ---
 
   const tabsConfig: Record<string, { icon: any, label: string }> = {
     dashboard: { icon: Home, label: "Início" },
@@ -69,7 +100,7 @@ export function StandardTabBar({ state, descriptors, navigation }: BottomTabBarP
                         />
                     </View>
                     
-                    {/* Label opcional (muitos apps removem label do botão central, mas mantive pequeno) */}
+                    {/* Label opcional */}
                     <Text className={`text-[10px] font-bold mt-1 ${isFocused ? 'text-emerald-500' : 'text-zinc-500'}`}>
                         Social
                     </Text>
@@ -88,7 +119,7 @@ export function StandardTabBar({ state, descriptors, navigation }: BottomTabBarP
             className="flex-1 items-center justify-center gap-1 pb-1"
             activeOpacity={0.7}
           >
-            {/* CORREÇÃO DO FORMATO: rounded-full + padding horizontal = Pílula */}
+            {/* Pílula de fundo no ícone ativo */}
             <View className={`px-5 py-1.5 rounded-full transition-all ${isFocused ? 'bg-emerald-500/10' : 'bg-transparent'}`}>
                 <IconComponent 
                     size={24} 
