@@ -20,6 +20,15 @@ export interface Highlight {
     color: string;
 }
 
+export interface ShopDetails {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  owner: { id: string; name: string; image: string | null; role: string };
+  products: MarketProduct[];
+}
+
 export interface ProductImage {
   id: string;
   url: string;
@@ -497,6 +506,29 @@ export const getProductDetails = async (id: string): Promise<ProductDetailsRespo
   } catch (error) {
     console.error("Erro ao carregar produto:", error);
     return null;
+  }
+};
+
+export const getShopById = async (shopId: string): Promise<ShopDetails | null> => {
+  try {
+    const { data } = await api.get(`/mobile/marketplace/shop/${shopId}`);
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar loja:", error);
+    return null;
+  }
+};
+
+export const buyProductWithCredits = async (productId: string) => {
+  try {
+    const { data } = await api.post(`/mobile/marketplace/products/${productId}/buy`);
+    return { success: true, data };
+  } catch (error: any) {
+    // Retorna o erro tratado para exibir o alerta correto
+    return { 
+      success: false, 
+      error: error.response?.data?.error || "Erro ao realizar compra" 
+    };
   }
 };
 

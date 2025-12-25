@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, Image, StatusBar, ActivityIndicator, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Search, Plus, MapPin, Store, Coins } from 'lucide-react-native';
 import { getMarketplaceFeed, MarketplaceFeed, MarketProduct } from '../../../lib/api';
 
@@ -29,12 +29,11 @@ export default function MarketplaceScreen() {
     setLoading(false);
   };
 
-  // --- Componentes Internos de UI ---
-
   const ProductCard = ({ product, isCredit = false }: { product: MarketProduct, isCredit?: boolean }) => (
     <TouchableOpacity 
         className="mr-4 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden w-40"
-        onPress={() => router.push(`/(app)/shop/product/${product.id}` as any)} // Rota futura
+        // CORREÇÃO AQUI: Apontando para a rota correta /(app)/product/...
+        onPress={() => router.push(`/(app)/product/${product.id}` as any)} 
     >
         <Image 
             source={{ uri: product.images[0]?.url || 'https://via.placeholder.com/150' }}
@@ -44,7 +43,6 @@ export default function MarketplaceScreen() {
         <View className="p-3">
             <Text numberOfLines={1} className="text-white font-bold text-sm">{product.title}</Text>
             
-            {/* Preço */}
             <View className="flex-row items-center mt-1">
                 {isCredit ? (
                     <>
@@ -52,11 +50,10 @@ export default function MarketplaceScreen() {
                         <Text className="text-amber-400 font-bold text-xs">{product.price} Créditos</Text>
                     </>
                 ) : (
-                    <Text className="text-emerald-500 font-bold text-sm">R$ {product.price}</Text>
+                    <Text className="text-emerald-500 font-bold text-sm">R$ {Number(product.price).toFixed(2)}</Text>
                 )}
             </View>
 
-            {/* Localização (Se não for loja de créditos) */}
             {!isCredit && (
                 <View className="flex-row items-center mt-2 opacity-60">
                     <MapPin size={10} color="#a1a1aa" />
@@ -84,7 +81,6 @@ export default function MarketplaceScreen() {
       <StatusBar barStyle="light-content" />
       <SafeAreaView className="flex-1">
         
-        {/* HEADER & SEARCH */}
         <View className="px-5 py-4 border-b border-zinc-900">
             <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-white text-2xl font-bold">Marketplace</Text>
@@ -117,7 +113,7 @@ export default function MarketplaceScreen() {
         ) : (
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
                 
-                {/* 1. LOJA DE CRÉDITOS (Recompensas) */}
+                {/* LOJA DE CRÉDITOS */}
                 {feed?.creditShop && feed.creditShop.length > 0 && (
                     <View className="mt-6">
                         <View className="px-5 flex-row items-center gap-2 mb-4">
@@ -135,7 +131,7 @@ export default function MarketplaceScreen() {
                     </View>
                 )}
 
-                {/* 2. LOJAS EM DESTAQUE */}
+                {/* LOJAS EM DESTAQUE */}
                 {feed?.shops && feed.shops.length > 0 && (
                     <View className="mt-8">
                         <View className="px-5 flex-row items-center gap-2 mb-4">
@@ -153,7 +149,7 @@ export default function MarketplaceScreen() {
                     </View>
                 )}
 
-                {/* 3. RECENTES (Feed Principal) */}
+                {/* RECENTES */}
                 <View className="mt-8 px-5">
                     <Text className="text-white font-bold text-lg mb-4">Novidades na Comunidade</Text>
                     <View className="flex-row flex-wrap justify-between">
@@ -161,7 +157,8 @@ export default function MarketplaceScreen() {
                             <View key={product.id} className="w-[48%] mb-4">
                                 <TouchableOpacity 
                                     className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden w-full pb-3"
-                                    onPress={() => router.push(`/(app)/shop/product/${product.id}` as any)}
+                                    // CORREÇÃO AQUI TAMBÉM
+                                    onPress={() => router.push(`/(app)/product/${product.id}` as any)}
                                 >
                                     <Image 
                                         source={{ uri: product.images[0]?.url || 'https://via.placeholder.com/150' }}
