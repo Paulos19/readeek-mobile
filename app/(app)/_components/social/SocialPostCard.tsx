@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { socialService } from 'lib/api';
 import { useAuthStore } from 'stores/useAuthStore';
+import { Link } from 'expo-router'; // <--- Importação necessária
 
 const { width } = Dimensions.get('window');
 
@@ -43,14 +44,25 @@ export const SocialPostCard = ({ post, onOpenComments, onDelete }: { post: any, 
       {/* HEADER: User Info */}
       <View className="flex-row justify-between items-center px-3 py-3">
         <View className="flex-row items-center gap-3">
-           <View className="w-8 h-8 rounded-full bg-zinc-800 overflow-hidden border border-zinc-700">
-              {author.image ? 
-                <Image source={{ uri: author.image }} className="w-full h-full" /> : 
-                <View className="items-center justify-center flex-1"><Text className="text-zinc-500 font-bold">{author.name?.[0]}</Text></View>
-              }
-           </View>
+           {/* AVATAR COM LINK PARA PERFIL */}
+           <Link href={`/(app)/users/${authorId}`} asChild>
+               <TouchableOpacity>
+                   <View className="w-8 h-8 rounded-full bg-zinc-800 overflow-hidden border border-zinc-700">
+                      {author.image ? 
+                        <Image source={{ uri: author.image }} className="w-full h-full" /> : 
+                        <View className="items-center justify-center flex-1"><Text className="text-zinc-500 font-bold">{author.name?.[0]}</Text></View>
+                      }
+                   </View>
+               </TouchableOpacity>
+           </Link>
+
            <View>
-              <Text className="text-white font-bold text-sm">{author.name || 'Usuário'}</Text>
+              {/* NOME COM LINK PARA PERFIL */}
+              <Link href={`/(app)/users/${authorId}`} asChild>
+                  <TouchableOpacity>
+                      <Text className="text-white font-bold text-sm">{author.name || 'Usuário'}</Text>
+                  </TouchableOpacity>
+              </Link>
               <Text className="text-zinc-500 text-[10px]">{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true, locale: ptBR })}</Text>
            </View>
         </View>
@@ -117,7 +129,7 @@ export const SocialPostCard = ({ post, onOpenComments, onDelete }: { post: any, 
                     <Text className="text-zinc-400 text-xs" numberOfLines={1}>{post.book.author}</Text>
                 </View>
                 <TouchableOpacity className="bg-zinc-800 p-2 rounded-full">
-                     <Bookmark size={16} color="#10b981" />
+                      <Bookmark size={16} color="#10b981" />
                 </TouchableOpacity>
             </View>
         </View>

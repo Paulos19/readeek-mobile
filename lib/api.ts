@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { storage } from './storage';
 import { Community, CommunityPost } from 'app/(app)/_types/community';
+import { PublicUserProfile } from 'app/(app)/_types/user';
 
 // IMPORTANTE: Mude para o IP da sua máquina se estiver testando no device físico
 // Ex: http://192.168.1.15:3000/api
@@ -334,3 +335,16 @@ export const socialService = {
     return res.data; 
   }
 };
+
+export const fetchUserProfile = async (userId: string): Promise<PublicUserProfile | null> => {
+  try {
+    // Reutilizando sua instância configurada do axios/fetch que já injeta o token
+    const { data } = await api.get(`/mobile/users/${userId}`);
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar perfil:", error);
+    return null;
+  }
+};
+
+export { PublicUserProfile };
