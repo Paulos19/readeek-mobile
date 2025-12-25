@@ -1,15 +1,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, RefreshControl, ScrollView, StatusBar, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, Link } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TrendingUp, Users, BookOpen, Download, CheckCircle2, WifiOff } from 'lucide-react-native';
+import { TrendingUp, Users, BookOpen, Download, CheckCircle2, WifiOff, Trophy, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // API & Libs
-import { api, registerDownload } from 'lib/api';
-import { fileManager } from 'lib/files';
-import { useAuthStore } from 'stores/useAuthStore';
+import { api, registerDownload, getRanking, RankingUser } from '../../lib/api';
+import { fileManager } from '../../lib/files';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { useNetworkStatus } from './_hooks/useNetworkStatus';
 
 // Tipos
@@ -19,6 +19,7 @@ import { Book, UserRole } from './_types/book';
 import { HeroBanner } from './_components/HeroBanner';
 import { GreetingHeader } from './_components/GreetingHeader';
 import { BookDetailsModal } from './_components/BookDetailsModal';
+import { RankingCard } from './_components/RankingCard'; // Novo componente criado
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -27,6 +28,7 @@ export default function Dashboard() {
 
   // Estados
   const [allBooks, setAllBooks] = useState<Book[]>([]);
+  const [topUsers, setTopUsers] = useState<RankingUser[]>([]); // Estado para o Ranking
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
@@ -34,10 +36,8 @@ export default function Dashboard() {
 
   // --- BUSCA DE DADOS ---
   const fetchBooks = async () => {
-    // 1. SEGURANÇA: Se não houver usuário (logout), aborta imediatamente.
     if (!user) return;
 
-    // Se estiver offline, cancela o loading e retorna
     if (isConnected === false) {
         setLoading(false);
         return;
@@ -91,7 +91,6 @@ export default function Dashboard() {
 
       setAllBooks(processedBooks);
     } catch (error: any) {
-      // 2. IGNORAR 401 NO LOGOUT: Se for erro de autenticação, não loga erro, pois o redirect vai acontecer.
       if (error.response?.status !== 401) {
           console.error("Erro ao carregar dashboard:", error);
       }
@@ -100,22 +99,35 @@ export default function Dashboard() {
     }
   };
 
+  // Nova função para buscar o Ranking
+  const loadTopRanking = async () => {
+    try {
+        const data = await getRanking();
+        // Pegamos apenas os top 5 para mostrar na Home
+        if (Array.isArray(data)) {
+            setTopUsers(data.slice(0, 5));
+        }
+    } catch (error) {
+        console.error("Erro ao carregar ranking", error);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchBooks();
+    await Promise.all([fetchBooks(), loadTopRanking()]); // Atualiza ambos
     setRefreshing(false);
   };
 
-  // 3. EFEITO BLINDADO: Só executa se tiver user
+  // EFEITO BLINDADO
   useEffect(() => { 
       if (!user) return;
       setLoading(true); 
-      fetchBooks(); 
+      fetchBooks();
+      loadTopRanking(); // Carrega o ranking ao iniciar
   }, [user, isConnected]); 
 
   // Filtros Memoized
   const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
-    // 4. PREVENÇÃO: Retorna vazio se não tiver usuário
     if (!user) return { featuredBooks: [], rankingBooks: [], communityBooks: [], myBooks: [] };
 
     const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
@@ -296,6 +308,34 @@ export default function Dashboard() {
               books={featuredBooks.length > 0 ? featuredBooks.slice(0, 5) : allBooks.slice(0, 3)} 
               onPress={handleBookPress} 
             />
+
+            {/* === SEÇÃO DE RANKING DE LEITORES === */}
+            {topUsers.length > 0 && (
+                <View className="mt-6 mb-2">
+                    <View className="px-6 flex-row justify-between items-center mb-4">
+                        <View className="flex-row items-center gap-2">
+                            <Trophy size={20} color="#fbbf24" />
+                            <Text className="text-white font-bold text-xl tracking-tight">Top Leitores</Text>
+                        </View>
+                        <Link href="/(app)/ranking" asChild>
+                            <TouchableOpacity className="flex-row items-center">
+                                <Text className="text-emerald-500 font-bold text-xs uppercase mr-1">Ver Ranking</Text>
+                                <ChevronRight size={16} color="#10b981" />
+                            </TouchableOpacity>
+                        </Link>
+                    </View>
+
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ paddingHorizontal: 24 }}
+                    >
+                        {topUsers.map((user, index) => (
+                            <RankingCard key={user.id} user={user} position={index + 1} />
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
 
             {myBooks.length > 0 && (
                 <View>

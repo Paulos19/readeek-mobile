@@ -7,7 +7,6 @@ import {
   UserPlus, UserCheck, Shield 
 } from 'lucide-react-native';
 
-// Importa a nova função toggleFollowUser
 import { fetchUserProfile, PublicUserProfile, toggleFollowUser } from '../../../lib/api';
 
 export default function PublicProfileScreen() {
@@ -17,10 +16,10 @@ export default function PublicProfileScreen() {
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Estados Locais para UI Otimista (Resposta instantânea)
+  // UI Otimista
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
-  const [loadingFollow, setLoadingFollow] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -32,8 +31,6 @@ export default function PublicProfileScreen() {
       setLoading(true);
       const data = await fetchUserProfile(id);
       setProfile(data);
-      
-      // Sincroniza estados locais com o dado da API
       if (data) {
           setIsFollowing(data.isFollowing);
           setFollowersCount(data._count.followers);
@@ -46,29 +43,28 @@ export default function PublicProfileScreen() {
   };
 
   const handleFollowToggle = async () => {
-    if (!profile || !id || loadingFollow) return;
+    if (!profile || !id || loadingAction) return;
 
-    // 1. Snapshot do estado anterior (para rollback em caso de erro)
-    const prevIsFollowing = isFollowing;
-    const prevFollowersCount = followersCount;
+    // Snapshot para rollback
+    const prevFollowing = isFollowing;
+    const prevCount = followersCount;
 
-    // 2. Atualização Otimista: Muda a UI antes da resposta do servidor
-    setIsFollowing(!prevIsFollowing);
-    setFollowersCount(prevIsFollowing ? prevFollowersCount - 1 : prevFollowersCount + 1);
-    setLoadingFollow(true);
+    // Atualização Otimista
+    setIsFollowing(!prevFollowing);
+    setFollowersCount(prevFollowing ? prevCount - 1 : prevCount + 1);
+    setLoadingAction(true);
 
     try {
-        // 3. Chamada à API
         await toggleFollowUser(id);
-        // Sucesso: O estado já está atualizado visualmente, não precisamos fazer nada.
+        // Sucesso: Mantém o estado atualizado
     } catch (error) {
-        console.error("Erro ao seguir:", error);
-        // 4. Rollback: Se der erro, volta ao estado anterior
-        setIsFollowing(prevIsFollowing);
-        setFollowersCount(prevFollowersCount);
-        Alert.alert("Erro", "Não foi possível realizar a ação. Tente novamente.");
+        console.error("Erro na ação de seguir:", error);
+        // Rollback em caso de erro
+        setIsFollowing(prevFollowing);
+        setFollowersCount(prevCount);
+        Alert.alert("Erro", "Não foi possível completar a ação.");
     } finally {
-        setLoadingFollow(false);
+        setLoadingAction(false);
     }
   };
 
@@ -83,16 +79,14 @@ export default function PublicProfileScreen() {
   if (!profile) {
     return (
       <View className="flex-1 bg-black justify-center items-center px-6">
+        <Stack.Screen options={{ headerShown: false }} />
         <View className="w-20 h-20 bg-zinc-900 rounded-full items-center justify-center mb-4">
             <Users size={32} color="#52525b" />
         </View>
         <Text className="text-white text-xl font-bold mb-2">Usuário não encontrado</Text>
-        <Text className="text-zinc-500 text-center mb-8">
-          O perfil pode estar privado ou não existir mais.
-        </Text>
         <TouchableOpacity 
           onPress={() => router.back()}
-          className="bg-zinc-800 px-8 py-3 rounded-full"
+          className="bg-zinc-800 px-8 py-3 rounded-full mt-4"
         >
           <Text className="text-white font-bold">Voltar</Text>
         </TouchableOpacity>
@@ -107,10 +101,10 @@ export default function PublicProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         
-        {/* === HEADER COM GRADIENTE === */}
+        {/* HEADER */}
         <View className="relative">
             <LinearGradient
-                colors={['#064e3b', '#022c22', '#000000']} // Verde Esmeralda escuro para preto
+                colors={['#064e3b', '#022c22', '#000000']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
                 className="h-64 w-full pt-12 px-4"
@@ -123,10 +117,9 @@ export default function PublicProfileScreen() {
                 </TouchableOpacity>
             </LinearGradient>
 
-            {/* === INFO DO PERFIL (Sobreposto) === */}
+            {/* INFO PROFILE */}
             <View className="px-6 -mt-24">
                 <View className="items-center">
-                    {/* Avatar */}
                     <View className="relative shadow-2xl shadow-black">
                         <View className="w-32 h-32 rounded-full p-1 bg-black">
                             <Image
@@ -141,7 +134,6 @@ export default function PublicProfileScreen() {
                         )}
                     </View>
 
-                    {/* Nome e Bio */}
                     <Text className="text-white text-2xl font-bold mt-4 text-center">{profile.name}</Text>
                     <Text className="text-emerald-500 text-xs font-bold uppercase tracking-widest mt-1 mb-4">
                         {profile.role === 'ADMIN' ? 'Administrador' : 'Leitor'}
@@ -153,15 +145,14 @@ export default function PublicProfileScreen() {
                         </Text>
                     )}
 
-                    {/* Botão Seguir (Com lógica implementada) */}
+                    {/* BOTÃO SEGUIR (Estilização simplificada para evitar crash) */}
                     <TouchableOpacity 
                         onPress={handleFollowToggle}
-                        disabled={loadingFollow}
-                        activeOpacity={0.8}
+                        disabled={loadingAction}
                         className={`px-8 py-3 rounded-full flex-row items-center gap-2 ${
                             isFollowing 
                                 ? 'bg-zinc-800 border border-zinc-700' 
-                                : 'bg-emerald-600 shadow-lg shadow-emerald-900/20'
+                                : 'bg-emerald-600'
                         }`}
                     >
                         {isFollowing ? (
@@ -178,11 +169,10 @@ export default function PublicProfileScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* === STATS === */}
+                {/* STATS */}
                 <View className="flex-row justify-between bg-zinc-900/80 border border-zinc-800 p-5 rounded-2xl mt-8 mb-6">
                     <StatItem value={profile._count.books} label="Livros" icon={BookOpen} />
                     <View className="w-[1px] bg-zinc-800" />
-                    {/* Usamos o estado local followersCount aqui para atualização instantânea */}
                     <StatItem value={followersCount} label="Seguidores" icon={Users} />
                     <View className="w-[1px] bg-zinc-800" />
                     <StatItem value={profile._count.following} label="Seguindo" icon={Eye} />
@@ -190,8 +180,8 @@ export default function PublicProfileScreen() {
             </View>
         </View>
 
-        {/* === INSÍGNIAS === */}
-        {profile.displayedInsigniaIds && profile.displayedInsigniaIds.length > 0 && (
+        {/* INSÍGNIAS */}
+        {profile.displayedInsigniaIds.length > 0 && (
             <View className="mb-8 px-6">
                 <View className="flex-row items-center gap-2 mb-4">
                     <Trophy size={18} color="#fbbf24" />
@@ -207,7 +197,7 @@ export default function PublicProfileScreen() {
             </View>
         )}
 
-        {/* === BIBLIOTECA === */}
+        {/* BIBLIOTECA */}
         <View className="px-6">
             <View className="flex-row items-center gap-2 mb-4">
                 <BookOpen size={18} color="#10b981" />
@@ -226,7 +216,6 @@ export default function PublicProfileScreen() {
                 <View className="gap-3">
                     {profile.books.map((book) => (
                         <View key={book.id} className="flex-row bg-zinc-900 border border-zinc-800 p-3 rounded-xl">
-                            {/* Capa */}
                             <View className="w-12 h-16 bg-zinc-800 rounded shadow-sm overflow-hidden mr-3">
                                 {book.coverUrl ? (
                                     <Image source={{ uri: book.coverUrl }} className="w-full h-full" />
@@ -234,13 +223,9 @@ export default function PublicProfileScreen() {
                                     <View className="flex-1 items-center justify-center"><BookOpen size={12} color="#52525b"/></View>
                                 )}
                             </View>
-                            
-                            {/* Info & Progresso */}
                             <View className="flex-1 justify-center">
                                 <Text className="text-zinc-200 font-bold text-sm mb-1" numberOfLines={1}>{book.title}</Text>
                                 <Text className="text-zinc-500 text-xs mb-2" numberOfLines={1}>{book.author || "Autor desconhecido"}</Text>
-                                
-                                {/* Barra de Progresso */}
                                 <View className="flex-row items-center gap-2">
                                     <View className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                                         <View 
@@ -256,13 +241,11 @@ export default function PublicProfileScreen() {
                 </View>
             )}
         </View>
-
       </ScrollView>
     </View>
   );
 }
 
-// Subcomponente de Estatísticas para limpeza
 const StatItem = ({ value, label, icon: Icon }: any) => (
     <View className="items-center flex-1">
         <Icon size={20} color="#10b981" style={{ marginBottom: 4, opacity: 0.8 }} />

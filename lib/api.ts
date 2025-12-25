@@ -20,6 +20,14 @@ export interface Highlight {
     color: string;
 }
 
+export interface RankingUser {
+  id: string;
+  name: string;
+  image: string | null;
+  score: number; // Mudou de 'credits' para 'score'
+  role: string;
+}
+
 // Interceptor para injetar o token automaticamente
 api.interceptors.request.use(async (config) => {
   const token = await storage.getToken();
@@ -346,6 +354,16 @@ export const socialService = {
   toggleCommentLike: async (commentId: string) => {
     const res = await api.post(`/mobile/social/comments/${commentId}/react`);
     return res.data; 
+  }
+};
+
+export const getRanking = async (): Promise<RankingUser[]> => {
+  try {
+    const { data } = await api.get('/mobile/ranking');
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar ranking:", error);
+    return [];
   }
 };
 

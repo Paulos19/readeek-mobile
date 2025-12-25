@@ -1,52 +1,48 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity } from 'react-native';
-import { Trophy, Download } from 'lucide-react-native';
-import { Book } from '../_types/book';
+import { Link } from 'expo-router';
+import { Trophy } from 'lucide-react-native';
+import { RankingUser } from '../../../lib/api';
 
-interface Props {
-    book: Book;
-    position: number;
-    onPress: (book: Book) => void;
+interface RankingCardProps {
+  user: RankingUser;
+  position: number;
 }
 
-export const RankingCard = ({ book, position, onPress }: Props) => {
-    let badgeColor = 'text-zinc-400';
-    let iconColor = '#a1a1aa';
-    
-    if (position === 1) { badgeColor = 'text-yellow-400'; iconColor = '#facc15'; }
-    if (position === 2) { badgeColor = 'text-gray-300'; iconColor = '#d4d4d8'; }
-    if (position === 3) { badgeColor = 'text-amber-600'; iconColor = '#d97706'; }
+export const RankingCard = ({ user, position }: RankingCardProps) => {
+  let medalColor = "#71717a";
+  if (position === 1) medalColor = "#fbbf24";
+  if (position === 2) medalColor = "#9ca3af";
+  if (position === 3) medalColor = "#b45309";
 
-    return (
-        <TouchableOpacity 
-            onPress={() => onPress(book)}
-            activeOpacity={0.7}
-            className="flex-row items-center bg-zinc-900/50 p-3 rounded-2xl mb-3 border border-white/5"
-        >
-            {/* Posição */}
-            <View className="w-8 items-center justify-center mr-3">
-                {position <= 3 ? <Trophy size={20} color={iconColor} /> : <Text className="text-zinc-500 font-bold text-lg">#{position}</Text>}
-            </View>
+  return (
+    <Link href={`/(app)/users/${user.id}`} asChild>
+      <TouchableOpacity className="mr-4 items-center w-28">
+        <View className="relative mb-2">
+          <View className={`w-20 h-20 rounded-full border-2 p-1 ${position <= 3 ? 'border-emerald-500' : 'border-zinc-800'}`}>
+             <Image 
+                source={{ uri: user.image || `https://ui-avatars.com/api/?name=${user.name}` }} 
+                className="w-full h-full rounded-full bg-zinc-800"
+             />
+          </View>
+          
+          <View 
+            className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full items-center justify-center border-2 border-black"
+            style={{ backgroundColor: position <= 3 ? medalColor : '#27272a' }}
+          >
+            <Text className="text-white font-bold text-xs">{position}º</Text>
+          </View>
+        </View>
 
-            {/* Capa Pequena */}
-            <View className="w-12 h-16 rounded-lg bg-zinc-800 overflow-hidden mr-3">
-                 {book.coverUrl && <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />}
-            </View>
-
-            {/* Info */}
-            <View className="flex-1">
-                <Text className="text-white font-bold text-sm" numberOfLines={1}>{book.title}</Text>
-                <Text className="text-zinc-500 text-xs" numberOfLines={1}>{book.author}</Text>
-                <View className="flex-row items-center gap-1 mt-1">
-                    <Download size={10} color="#10b981" />
-                    <Text className="text-emerald-500 text-[10px] font-bold">{book.downloadsCount || 0} downloads</Text>
-                </View>
-            </View>
-
-            {/* Badge de Posição */}
-            <View className="px-3">
-                <Text className={`font-black text-xl italic ${badgeColor}`}>{position}</Text>
-            </View>
-        </TouchableOpacity>
-    );
+        <Text numberOfLines={1} className="text-white font-bold text-sm text-center mb-0.5">
+            {user.name}
+        </Text>
+        <View className="flex-row items-center bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-800">
+            <Trophy size={10} color="#fbbf24" style={{ marginRight: 4 }} />
+            {/* ATUALIZADO AQUI: user.score */}
+            <Text className="text-zinc-400 text-[10px] font-bold">{user.score} pts</Text>
+        </View>
+      </TouchableOpacity>
+    </Link>
+  );
 };
