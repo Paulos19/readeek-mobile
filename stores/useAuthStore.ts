@@ -1,4 +1,3 @@
-// stores/useAuthStore.ts
 import { create } from 'zustand';
 import { router } from 'expo-router';
 import { api } from 'lib/api';
@@ -28,7 +27,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
-  isLoading: true,
+  isLoading: true, // Começa carregando para o _layout.tsx esperar
 
   signIn: async (email, password) => {
     try {
@@ -37,13 +36,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       const { user, token } = response.data;
       
-      // Salva tanto o token quanto o objeto do usuário
+      // Salva persistência
       await storage.setToken(token);
-      // @ts-ignore - Certifique-se de ter implementado setUser no lib/storage.ts
-      await storage.setUser(user); 
+      await storage.setUser(user);
       
+      // Atualiza estado em memória
       set({ user, token, isLoading: false });
       
+      // Redireciona
       router.replace('/(app)/dashboard'); 
       
     } catch (error: any) {
@@ -55,12 +55,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    await storage.removeToken();
-    // @ts-ignore - Certifique-se de ter implementado removeUser no lib/storage.ts
-    await storage.removeUser(); 
-    
-    set({ user: null, token: null });
-    router.replace('/login');
+    try {
+      await storage.removeToken();
+      await storage.removeUser();
+      
+      set({ user: null, token: null });
+      router.replace('/login');
+    } catch (error) {
+      console.error('Erro ao sair:', error);
+    }
   },
 
   loadStorageData: async () => {
@@ -68,20 +71,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true });
       
       // Carrega token e usuário simultaneamente
-      const token = await storage.getToken();
-      // @ts-ignore - Certifique-se de ter implementado getUser no lib/storage.ts
-      const user = await storage.getUser(); 
+      const [token, user] = await Promise.all([
+        storage.getToken(),
+        storage.getUser()
+      ]);
       
       if (token && user) {
+        // Se temos ambos, o usuário está autenticado e hidratado
         set({ token, user });
-      } else if (token) {
-        // Fallback: Se tiver token mas não user (caso raro), tenta recuperar da API ou define apenas token
-        set({ token });
-        // Opcional: chamar api.get('/me') aqui
+        
+        // Opcional: Validar token ou atualizar usuário em background
+        // api.get('/mobile/auth/me').then(res => set({ user: res.data })).catch(() => {});
+      } else if (token && !user) {
+        // Caso raro: Tem token mas perdeu o user data. Tenta recuperar ou força logout.
+        // Aqui assumimos logout para segurança e consistência UI.
+        await storage.removeToken();
+        set({ token: null, user: null });
       }
       
     } catch (error) {
       console.error('Erro ao carregar dados do storage:', error);
+      set({ token: null, user: null });
     } finally {
       set({ isLoading: false });
     }
@@ -90,10 +100,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   updateUser: (data) => {
     const currentUser = get().user;
     if (currentUser) {
-      const updatedUser = { ...currentUser, ...data };
+      const updatedUser = { ...currentUser, ...data } as User;
       set({ user: updatedUser });
-      // Opcional: Atualizar o storage local também para persistir a edição
-      // storage.setUser(updatedUser); 
+      // Persiste a atualização localmente para não perder ao reiniciar
+      storage.setUser(updatedUser); 
     }
   }
 }));

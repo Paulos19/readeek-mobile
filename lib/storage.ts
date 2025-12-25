@@ -1,16 +1,16 @@
-// lib/storage.ts
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = 'readeek_token';
-const USER_KEY = 'readeek_user_data'; // Nova chave para o usuário
+const USER_KEY = 'readeek_user_data';
 
 export const storage = {
-  // ... suas funções de token existentes ...
+  // --- TOKEN (SecureStore) ---
   getToken: async () => {
     try {
       return await SecureStore.getItemAsync(TOKEN_KEY);
     } catch (error) {
+      console.error('Error getting token:', error);
       return null;
     }
   },
@@ -29,7 +29,7 @@ export const storage = {
     }
   },
 
-  // ADICIONE ESTAS FUNÇÕES PARA O USER
+  // --- USER DATA (AsyncStorage) ---
   getUser: async () => {
     try {
       const jsonValue = await AsyncStorage.getItem(USER_KEY);

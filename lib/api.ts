@@ -39,7 +39,6 @@ export const syncProgress = async (bookId: string, cfi: string, percentage: numb
     });
     console.log(`[Sync] Progresso salvo na nuvem: ${Math.round(percentage * 100)}%`);
   } catch (error) {
-    // Silent fail: Se falhar (offline), não tem problema, o local storage é a verdade absoluta no momento
     console.log('[Sync] Falha ao sincronizar (provavelmente offline)');
   }
 };
@@ -63,7 +62,6 @@ export const highlightService = {
 export const registerDownload = async (bookId: string) => {
     try {
         const response = await api.post('/mobile/books/download', { bookId });
-        // Retorna o ID do livro que deve ser usado no sistema de arquivos
         return response.data.newBookId; 
     } catch (error) {
         console.error("[API] Falha ao registrar download", error);
@@ -76,9 +74,9 @@ export const repairBookMetadata = async (bookId: string) => {
         const response = await api.post('/mobile/books/refresh', { bookId });
         if (response.data.updated) {
             console.log("[Metadata] Livro atualizado com sucesso:", response.data.book.title);
-            return response.data.book; // Retorna os novos dados (capa, titulo, etc)
+            return response.data.book; 
         }
-        return null; // Não precisou atualizar
+        return null; 
     } catch (error) {
         console.error("[Metadata] Falha ao tentar reparar metadados:", error);
         return null;
@@ -88,25 +86,20 @@ export const repairBookMetadata = async (bookId: string) => {
 export const uploadBook = async (fileUri: string, fileName: string, mimeType: string) => {
     try {
         const formData = new FormData();
-        
-        // No React Native, o objeto de arquivo para FormData tem essa estrutura específica
         const fileData = {
             uri: fileUri,
             name: fileName,
             type: mimeType || 'application/epub+zip'
-        } as any; // Cast para any necessário para evitar erro de tipagem do TS no React Native
+        } as any; 
 
         formData.append('file', fileData);
 
         const response = await api.post('/mobile/books', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+            headers: { 'Content-Type': 'multipart/form-data' },
         });
 
         return { success: true, data: response.data };
     } catch (error: any) {
-        // Tratamento de erro específico para duplicidade (409)
         if (error.response && error.response.status === 409) {
             return { success: false, error: 'duplicate', message: error.response.data.message };
         }
@@ -117,14 +110,10 @@ export const uploadBook = async (fileUri: string, fileName: string, mimeType: st
 
 export const profileService = {
   update: async (data: { name?: string; about?: string; profileVisibility?: 'PUBLIC' | 'PRIVATE'; image?: string }) => {
-    
-    // Verifica se há uma imagem para upload (URI local começa com file:// ou content://)
     const hasNewImage = data.image && (data.image.startsWith('file://') || data.image.startsWith('content://'));
 
     if (hasNewImage) {
-      // --- MODO MULTIPART (Upload) ---
       const formData = new FormData();
-      
       if (data.name) formData.append('name', data.name);
       if (data.about) formData.append('about', data.about);
       if (data.profileVisibility) formData.append('profileVisibility', data.profileVisibility);
@@ -147,25 +136,19 @@ export const profileService = {
       return res.data;
 
     } else {
-      // --- MODO JSON (Texto normal) ---
-      // Removemos a imagem se ela for uma URL http (já existente na nuvem), 
-      // para não reenviar a string da URL como se fosse um arquivo.
       const { image, ...textData } = data; 
-      
       const res = await api.patch('/mobile/profile/update', textData);
       return res.data;
     }
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
-     // ... (manter igual)
      const res = await api.post('/mobile/auth/change-password', { currentPassword, newPassword });
      return res.data;
   }
 };
 
 export const communityService = {
-  // --- LEITURA E DESCOBERTA ---
   getAll: async () => {
     const res = await api.get('/mobile/communities');
     return res.data; 
@@ -173,11 +156,9 @@ export const communityService = {
   
   getById: async (id: string) => {
     const res = await api.get(`/mobile/communities/${id}`);
-    // Retorna { ...community, posts, files, members, isLocked, currentUserRole }
     return res.data; 
   },
 
-  // --- BUSCA DE MEMBROS (PARA MENÇÃO @) ---
   searchMembers: async (communityId: string, query: string) => {
     const res = await api.get(`/mobile/communities/${communityId}/members/search`, {
       params: { query }
@@ -185,7 +166,6 @@ export const communityService = {
     return res.data; 
   },
 
-  // --- GESTÃO DA COMUNIDADE ---
   create: async (data: { 
     name: string; 
     description: string; 
@@ -222,7 +202,6 @@ export const communityService = {
     return res.data;
   },
 
-  // --- PERMISSÕES E ARQUIVOS ---
   uploadFile: async (communityId: string, fileUri: string, fileName: string, mimeType: string) => {
     const formData = new FormData();
     formData.append('file', {
@@ -242,7 +221,6 @@ export const communityService = {
     return res.data;
   },
 
-  // --- INTERAÇÃO SOCIAL: POSTS ---
   createPost: async (communityId: string, content: string) => {
     const res = await api.post(`/mobile/communities/${communityId}/posts`, { content });
     return res.data;
@@ -250,10 +228,9 @@ export const communityService = {
 
   toggleLike: async (postId: string) => {
     const res = await api.post(`/mobile/communities/posts/${postId}/react`, { emoji: '❤️' });
-    return res.data; // { action: 'added' | 'removed' }
+    return res.data; 
   },
 
-  // --- INTERAÇÃO SOCIAL: COMENTÁRIOS ---
   getComments: async (postId: string) => {
     const res = await api.get(`/mobile/communities/posts/${postId}/comments`);
     return res.data;
@@ -262,47 +239,46 @@ export const communityService = {
   createComment: async (postId: string, content: string, parentId?: string) => {
     const res = await api.post(`/mobile/communities/posts/${postId}/comments`, { 
       content, 
-      parentId // Opcional: ID do comentário pai para respostas aninhadas
+      parentId 
     });
     return res.data;
   },
 
   toggleCommentLike: async (commentId: string) => {
     const res = await api.post(`/mobile/communities/comments/${commentId}/react`);
-    return res.data; // { action: 'added' | 'removed' }
+    return res.data;
   }
 };
 
+// --- SERVIÇO SOCIAL PRINCIPAL (FEED) ---
 export const socialService = {
-  // --- FEED PRINCIPAL ---
   getFeed: async () => {
     const res = await api.get('/mobile/social/feed');
     return res.data;
   },
 
-  // --- BUSCA DE USUÁRIOS (MENÇÕES) ---
+  // Busca de usuários para menções
   searchUsers: async (query: string) => {
     try {
         const res = await api.get('/mobile/users/search', { params: { query } });
         return res.data;
-    } catch (error) {
-        console.warn("Rota de busca de usuários não encontrada ou falhou.");
-        return []; 
+    } catch (e) {
+        console.warn('API de busca de usuários não disponível');
+        return [];
     }
   },
 
-  // --- CRIAÇÃO DE POST (HÍBRIDO: JSON ou MULTIPART) ---
+  // Criação de Post com suporte a Imagem (Multipart)
   createPost: async (data: { content: string; type: 'POST' | 'EXCERPT' | 'CHALLENGE'; bookId?: string; imageUri?: string }) => {
     const { content, type, bookId, imageUri } = data;
 
-    // Se tiver imagem, OBRIGATÓRIO usar FormData
+    // Se tiver imagem, usa FormData (Multipart)
     if (imageUri) {
         const formData = new FormData();
         formData.append('content', content);
         formData.append('type', type);
         if (bookId) formData.append('bookId', bookId);
 
-        // Tratamento de arquivo no React Native
         const filename = imageUri.split('/').pop() || 'post.jpg';
         const match = /\.(\w+)$/.exec(filename);
         const mimeType = match ? `image/${match[1]}` : `image/jpeg`;
@@ -311,37 +287,35 @@ export const socialService = {
             uri: imageUri,
             name: filename,
             type: mimeType,
-        } as any); // 'as any' é necessário devido à tipagem estrita do TS vs React Native
+        } as any);
 
         const res = await api.post('/mobile/social/posts', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
         return res.data;
     } else {
-        // Se for só texto, envia JSON normal (mais rápido e leve)
+        // Postagem apenas de texto/citação (JSON mais leve)
         const res = await api.post('/mobile/social/posts', { content, type, bookId });
         return res.data;
     }
   },
 
-  // --- AÇÕES DO POST ---
   toggleLike: async (postId: string) => {
     const res = await api.post(`/mobile/social/posts/${postId}/react`);
-    return res.data; // Espera { action: 'added' | 'removed' }
+    return res.data;
   },
 
   deletePost: async (postId: string) => {
-    const res = await api.delete(`/mobile/social/posts?id=${postId}`); // Ou delete(`/mobile/social/posts/${postId}`) dependendo da sua rota
+    const res = await api.delete(`/mobile/social/posts/${postId}`);
     return res.data;
   },
 
-  // --- LIVROS (Para selecionar citação) ---
   getMyBooks: async () => {
-    const res = await api.get('/mobile/books'); // Reutiliza rota existente
+    const res = await api.get('/mobile/books');
     return res.data;
   },
 
-  // --- SISTEMA DE COMENTÁRIOS (SOCIAL) ---
+  // Comentários do Feed Social
   getComments: async (postId: string) => {
     const res = await api.get(`/mobile/social/posts/${postId}/comments`);
     return res.data;

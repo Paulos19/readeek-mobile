@@ -1,51 +1,57 @@
-// app/_layout.tsx
 import { useEffect } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import "../global.css"; // Importação do NativeWind/Tailwind
-import { useAuthStore } from 'stores/useAuthStore';
+import { useAuthStore } from '../stores/useAuthStore';
+import { View, ActivityIndicator } from 'react-native';
+import '../global.css';
 
-
-export default function RootLayout() {
+const InitialLayout = () => {
+  // 1. Buscamos token e isLoading diretamente (sem isAuthenticated)
   const { token, isLoading, loadStorageData } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
 
-  // 1. Tenta recuperar o token do SecureStore ao abrir o app
+  // 2. Derivamos o isAuthenticated baseando-se na presença do token
+  const isAuthenticated = !!token;
+
+  // 3. Carrega os dados do storage ao montar o componente
   useEffect(() => {
     loadStorageData();
   }, []);
 
-  // 2. Efeito "Guarda-Costas": Monitora o token e a rota atual
+  // 4. Lógica de Redirecionamento e Proteção de Rotas
   useEffect(() => {
+    // Se ainda está carregando o storage, não faz nada
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(app)';
-    
-    if (!token && inAuthGroup) {
-      // Se não tem token e tenta acessar área logada -> Login
-      router.replace('/login');
-    } else if (token && !inAuthGroup) {
-      // Se tem token e está fora (ex: login) -> Dashboard
-      router.replace('/(app)/dashboard');
-    }
-  }, [token, isLoading, segments]);
 
-  // Tela de Loading enquanto verifica o token (Splash Screen manual)
+    if (isAuthenticated && !inAuthGroup) {
+      // Se está logado, mas está na tela de login ou inicial, manda para o dashboard
+      router.replace('/(app)/dashboard');
+    } else if (!isAuthenticated && inAuthGroup) {
+      // Se NÃO está logado e tenta acessar área interna (dashboard/perfil), manda para login
+      router.replace('/login');
+    }
+  }, [isAuthenticated, isLoading, segments]);
+
+  // 5. Tela de Loading enquanto verifica a persistência
   if (isLoading) {
     return (
-      <View className="flex-1 bg-zinc-950 items-center justify-center">
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#09090b' }}>
         <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
 
+  return <Slot />;
+};
+
+export default function RootLayout() {
   return (
     <>
       <StatusBar style="light" />
-      {/* O Slot renderiza a rota filha atual */}
-      <Slot /> 
+      <InitialLayout />
     </>
   );
 }

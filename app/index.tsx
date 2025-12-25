@@ -6,13 +6,13 @@ import { Mail, Lock } from 'lucide-react-native';
 
 import { useAuthStore } from 'stores/useAuthStore';
 import { useKeyboardShift } from '_hooks/useKeyboardShift';
+import { Logo } from './_components/auth/Logo';
 import { AuthInput } from './_components/auth/AuthInput';
 import { AuthButton } from './_components/auth/AuthButton';
-import { Logo } from './_components/auth/Logo';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signIn, isLoading } = useAuthStore()
+  const { signIn, isLoading } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -26,10 +26,11 @@ export default function LoginScreen() {
     }
     try {
       await signIn(email, password);
+      // Redirecionamento é tratado pelo signIn ou _layout, mas reforçamos aqui
       router.replace('/(app)/dashboard');
     } catch (error: any) {
-       // Idealmente, o store ou a API já tratam a mensagem de erro
-       Alert.alert("Erro no Login", "Verifique suas credenciais.");
+       console.error(error);
+       Alert.alert("Erro no Login", error.message || "Verifique suas credenciais.");
     }
   };
 
@@ -38,8 +39,8 @@ export default function LoginScreen() {
       <StatusBar barStyle="light-content" />
       
       {/* Usamos Animated.ScrollView para que toda a tela suba suavemente.
-         O 'keyboardShouldPersistTaps="handled"' é crucial para conseguir clicar 
-         no botão de login mesmo com o teclado aberto.
+          O 'keyboardShouldPersistTaps="handled"' é crucial para conseguir clicar 
+          no botão de login mesmo com o teclado aberto.
       */}
       <Animated.ScrollView 
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}

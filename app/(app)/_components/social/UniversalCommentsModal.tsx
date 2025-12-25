@@ -8,7 +8,6 @@ interface CommentProps {
     visible: boolean;
     onClose: () => void;
     postId: string;
-    // Funções injetadas para permitir reuso (API de Social vs API de Comunidade)
     fetchCommentsFn: (postId: string) => Promise<any[]>;
     createCommentFn: (postId: string, content: string, parentId?: string) => Promise<any>;
     toggleLikeFn: (commentId: string) => Promise<any>;
@@ -16,9 +15,13 @@ interface CommentProps {
 }
 
 const CommentItem = ({ comment, onReply, onLike }: any) => {
-    // Normalização: suporta tanto estrutura 'author' quanto 'user'
+    // Normalização: suporta tanto 'author' (comunidade) quanto 'user' (feed social)
     const author = comment.author || comment.user || {};
     
+    // CORREÇÃO CRÍTICA: O banco retorna 'text', mas o front às vezes espera 'content'.
+    // Usamos essa lógica para garantir que sempre tenha texto.
+    const commentText = comment.content || comment.text || "";
+
     const [liked, setLiked] = useState(comment.isLiked || false);
     const [likesCount, setLikesCount] = useState(comment._count?.reactions || 0);
 
@@ -33,17 +36,20 @@ const CommentItem = ({ comment, onReply, onLike }: any) => {
              <View className="w-8 h-8 rounded-full bg-zinc-800 items-center justify-center border border-zinc-700 overflow-hidden">
                 {author.image ? 
                     <Image source={{ uri: author.image }} className="w-full h-full" /> : 
-                    <Text className="text-zinc-400 font-bold text-xs">{author.name?.[0]}</Text>
+                    <Text className="text-zinc-400 font-bold text-xs">{author.name?.[0] || '?'}</Text>
                 }
             </View>
             <View className="flex-1">
                 <View className="bg-zinc-900 p-3 rounded-2xl rounded-tl-none border border-zinc-800/60">
                     <View className="flex-row justify-between mb-1">
                         <Text className="text-emerald-500 font-bold text-xs">{author.name || 'Usuário'}</Text>
-                        <Text className="text-zinc-600 text-[10px]">{formatDistanceToNow(new Date(comment.createdAt), { locale: ptBR })}</Text>
+                        <Text className="text-zinc-600 text-[10px]">
+                            {comment.createdAt ? formatDistanceToNow(new Date(comment.createdAt), { locale: ptBR }) : 'Agora'}
+                        </Text>
                     </View>
                     <Text className="text-zinc-300 text-sm leading-5">
-                        {comment.content.split(' ').map((word: string, i: number) => 
+                        {/* A renderização condicional agora usa commentText garantido */}
+                        {commentText.split(' ').map((word: string, i: number) => 
                             word.startsWith('@') ? <Text key={i} className="text-emerald-400 font-bold">{word} </Text> : <Text key={i}>{word} </Text>
                         )}
                     </Text>
@@ -51,7 +57,7 @@ const CommentItem = ({ comment, onReply, onLike }: any) => {
                 <View className="flex-row gap-4 mt-1.5 ml-2">
                     <TouchableOpacity onPress={handleLike} className="flex-row items-center gap-1">
                          <Heart size={10} color={liked ? "#ef4444" : "#71717a"} fill={liked ? "#ef4444" : "transparent"} />
-                        <Text className={`text-base font-bold ${liked ? 'text-red-400' : 'text-zinc-500'}`} style={{ fontSize: 10 }}>Curtir ({likesCount})</Text>
+                        <Text className={`font-bold ${liked ? 'text-red-400' : 'text-zinc-500'}`} style={{ fontSize: 10 }}>Curtir ({likesCount})</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => onReply(comment)}>
                         <Text className="text-zinc-500 text-[10px] font-bold">Responder</Text>
@@ -79,7 +85,10 @@ export const UniversalCommentsModal = ({ visible, onClose, postId, fetchComments
         if (visible && postId) {
             setLoading(true);
             fetchCommentsFn(postId)
-                .then(setComments)
+                .then(data => {
+                    // Garante que é um array antes de setar
+                    setComments(Array.isArray(data) ? data : []);
+                })
                 .catch(err => console.log("Erro ao buscar comentários", err))
                 .finally(() => setLoading(false));
         }
@@ -91,22 +100,17 @@ export const UniversalCommentsModal = ({ visible, onClose, postId, fetchComments
         const words = text.split(' ');
         const lastWord = words[words.length - 1];
 
-        // Limpa o timer anterior (Debounce)
         if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
         if (lastWord.startsWith('@') && lastWord.length > 1) {
             const query = lastWord.substring(1);
             setMentionQuery(query);
             
-            // Só busca se tiver 2+ caracteres e espera 500ms parando de digitar
             if (query.length >= 2) {
                 searchTimeout.current = setTimeout(() => {
                     setShowMentions(true);
                     searchMentionsFn(query)
-                        .then(res => {
-                             // Proteção contra API que não retorna array (caso mock ou erro)
-                             setMentionList(Array.isArray(res) ? res : []); 
-                        })
+                        .then(res => setMentionList(Array.isArray(res) ? res : []))
                         .catch(() => setShowMentions(false));
                 }, 500);
             } else {
@@ -119,7 +123,7 @@ export const UniversalCommentsModal = ({ visible, onClose, postId, fetchComments
 
     const handleSelectMention = (user: any) => {
         const words = newComment.split(' ');
-        words.pop(); // Remove o termo de busca incompleto
+        words.pop(); 
         setNewComment(`${words.join(' ')} @${user.name} `);
         setShowMentions(false);
     };
@@ -129,7 +133,6 @@ export const UniversalCommentsModal = ({ visible, onClose, postId, fetchComments
         setSending(true);
         try {
             const added = await createCommentFn(postId, newComment, replyingTo?.id);
-            // Garante que o retorno seja adicionado à lista localmente
             if (added) {
                 setComments(prev => [...prev, added]);
             }
@@ -159,11 +162,16 @@ export const UniversalCommentsModal = ({ visible, onClose, postId, fetchComments
                         ) : (
                             <FlatList
                                 data={comments}
-                                keyExtractor={item => item.id}
+                                keyExtractor={item => item.id || Math.random().toString()}
                                 renderItem={({item}) => (
                                     <CommentItem 
                                         comment={item} 
-                                        onReply={(c: any) => { setReplyingTo(c); setNewComment(`@${c.author?.name || c.user?.name} `); inputRef.current?.focus(); }}
+                                        onReply={(c: any) => { 
+                                            const name = c.author?.name || c.user?.name || 'User';
+                                            setReplyingTo(c); 
+                                            setNewComment(`@${name} `); 
+                                            inputRef.current?.focus(); 
+                                        }}
                                         onLike={toggleLikeFn}
                                     />
                                 )}
@@ -172,7 +180,6 @@ export const UniversalCommentsModal = ({ visible, onClose, postId, fetchComments
                             />
                         )}
 
-                        {/* LISTA DE MENÇÕES FLUTUANTE */}
                         {showMentions && mentionList.length > 0 && (
                             <View className="absolute bottom-24 left-4 right-4 bg-zinc-800 rounded-xl border border-zinc-700 shadow-xl z-50 max-h-40">
                                 <FlatList
