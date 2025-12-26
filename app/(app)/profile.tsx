@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, Text, TouchableOpacity, Image, ScrollView, 
   Modal, TextInput, ActivityIndicator, Alert, Switch, StatusBar, Dimensions 
@@ -8,8 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { 
   LogOut, Settings, ChevronRight, Lock, Shield, 
   Edit3, X, Save, Camera, Book, Star, Users, 
-  CreditCard, LayoutGrid, Eye, EyeOff, KeyRound,
-  MessageSquare, Plus
+  CreditCard, LayoutGrid, Eye, KeyRound, MessageSquare, Plus
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -19,7 +18,7 @@ import { profileService, getProfileStats, toggleFollowUser, api } from '../../li
 
 const { width } = Dimensions.get('window');
 
-// --- COMPONENTES AUXILIARES ---
+// --- COMPONENTES DE APOIO ---
 
 const StatCard = ({ label, value, icon: Icon }: any) => (
   <View className="items-center justify-center bg-zinc-900/50 border border-zinc-800 rounded-3xl p-4 flex-1 mx-1 shadow-sm">
@@ -40,7 +39,7 @@ export default function ProfileScreen() {
   const [userPosts, setUserPosts] = useState([]);
   const [activeTab, setActiveTab] = useState<'content' | 'settings'>('content');
 
-  // Modais e Forms
+  // Forms e Modais
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [name, setName] = useState(user?.name || '');
@@ -68,7 +67,7 @@ export default function ProfileScreen() {
         setSuggestions(statsRes.suggestions || []);
       }
 
-      // FILTRO: Apenas livros adicionados por este usuário
+      // FILTRO: Apenas livros adicionados por mim
       const myOwnedBooks = (booksRes.data || []).filter((b: any) => b.userId === user?.id);
       setUserBooks(myOwnedBooks);
       
@@ -79,7 +78,6 @@ export default function ProfileScreen() {
     } catch (e: any) {
       if (e.response?.status === 401) {
         signOut();
-        router.replace('/login');
       }
     } finally {
       setLoading(false);
@@ -123,20 +121,15 @@ export default function ProfileScreen() {
     <View className="flex-1 bg-black">
       <StatusBar barStyle="light-content" />
       
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={{ paddingBottom: 120 }}
-      >
-        {/* HEADER */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+        
+        {/* HEADER SECTION */}
         <View className="h-[280px] relative">
           <LinearGradient colors={['#064e3b', '#022c22', '#000000']} className="absolute inset-0 h-56" />
           
           <View className="px-6 flex-row justify-between items-center mt-12">
-            <Text className="text-white font-black text-2xl tracking-tighter">Conta</Text>
-            <TouchableOpacity 
-              onPress={() => setShowEditProfile(true)}
-              className="bg-white/10 p-2.5 rounded-full border border-white/10"
-            >
+            <Text className="text-white font-black text-2xl tracking-tighter">Perfil</Text>
+            <TouchableOpacity onPress={() => setShowEditProfile(true)} className="bg-white/10 p-2.5 rounded-full border border-white/10">
               <Settings size={20} color="white" />
             </TouchableOpacity>
           </View>
@@ -149,24 +142,17 @@ export default function ProfileScreen() {
                 />
                 <View className="absolute -bottom-1 -right-1 bg-emerald-500 w-6 h-6 rounded-full border-2 border-black" />
               </View>
-              
               <Text className="text-white text-2xl font-black mt-3 tracking-tight">{user?.name}</Text>
-              <View className="flex-row items-center mt-1">
-                <Text className="text-zinc-500 font-bold">@{user?.email?.split('@')[0]}</Text>
-                <View className="bg-emerald-500/10 px-2 py-0.5 rounded-md ml-2 border border-emerald-500/20">
-                  <Text className="text-emerald-500 text-[10px] font-black uppercase">{stats?.role || 'USER'}</Text>
-                </View>
-              </View>
+              <Text className="text-zinc-500 font-bold">@{user?.email?.split('@')[0]}</Text>
           </View>
         </View>
 
-        {/* CARD DE CRÉDITOS REDESENHADO (BORDA SIMÉTRICA) */}
+        {/* CARD DE CRÉDITOS GOLD */}
         <View className="px-6 mt-8">
             <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/shop')}>
                 <LinearGradient
                     colors={['#1e1b12', '#0c0a09']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                     style={{ borderRadius: 32, borderWidth: 1, borderColor: 'rgba(251, 191, 36, 0.2)' }}
                     className="flex-row items-center p-6 shadow-2xl"
                 >
@@ -194,29 +180,24 @@ export default function ProfileScreen() {
           <StatCard label="Posts" value={userPosts.length} icon={MessageSquare} />
         </View>
 
-        {/* TABS */}
+        {/* TABS SELECTOR */}
         <View className="mt-10 px-6">
           <View className="flex-row bg-zinc-900/80 p-1.5 rounded-2xl border border-zinc-800 mb-8">
-            <TouchableOpacity 
-              onPress={() => setActiveTab('content')}
-              className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'content' ? 'bg-zinc-800' : ''}`}
-            >
+            <TouchableOpacity onPress={() => setActiveTab('content')} className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'content' ? 'bg-zinc-800 shadow-sm' : ''}`}>
               <LayoutGrid size={18} color={activeTab === 'content' ? 'white' : '#71717a'} />
-              <Text className={`font-bold ml-2 ${activeTab === 'content' ? 'text-white' : 'text-zinc-500'}`}>Estante</Text>
+              <Text className={`font-bold ml-2 ${activeTab === 'content' ? 'text-white' : 'text-zinc-500'}`}>Atividade</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => setActiveTab('settings')}
-              className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'settings' ? 'bg-zinc-800' : ''}`}
-            >
+            <TouchableOpacity onPress={() => setActiveTab('settings')} className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'settings' ? 'bg-zinc-800 shadow-sm' : ''}`}>
               <Shield size={18} color={activeTab === 'settings' ? 'white' : '#71717a'} />
-              <Text className={`font-bold ml-2 ${activeTab === 'settings' ? 'text-white' : 'text-zinc-500'}`}>Privacidade</Text>
+              <Text className={`font-bold ml-2 ${activeTab === 'settings' ? 'text-white' : 'text-zinc-500'}`}>Segurança</Text>
             </TouchableOpacity>
           </View>
 
           {activeTab === 'content' ? (
             <View>
+               {/* ESTANTE */}
                <View className="mb-10">
-                    <Text className="text-white font-black text-xl tracking-tight mb-5 ml-1">Meus Livros</Text>
+                    <Text className="text-white font-black text-xl mb-5 ml-1 tracking-tight">Minha Estante</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {userBooks.length > 0 ? userBooks.map((book: any) => (
                             <TouchableOpacity key={book.id} className="mr-5 w-28" onPress={() => router.push(`/read/${book.id}` as any)}>
@@ -228,20 +209,38 @@ export default function ProfileScreen() {
                         )) : (
                             <View className="bg-zinc-900/40 p-10 rounded-[35px] border border-zinc-800 border-dashed items-center w-[280px]">
                                 <Book size={32} color="#3f3f46" />
-                                <Text className="text-zinc-500 text-sm mt-3 font-bold text-center">Nenhum livro adicionado.</Text>
+                                <Text className="text-zinc-500 text-sm mt-3 font-bold text-center">Nenhum livro próprio.</Text>
                             </View>
                         )}
                     </ScrollView>
                </View>
 
+               {/* RECENT POSTS */}
                <View className="mb-10">
-                    <Text className="text-white font-black text-xl mb-5 ml-1 tracking-tight">Atividade</Text>
+                    <Text className="text-white font-black text-xl mb-5 ml-1 tracking-tight">Posts Recentes</Text>
                     {userPosts.slice(0, 3).map((post: any) => (
                         <View key={post.id} className="bg-zinc-900/50 p-6 rounded-[32px] border border-zinc-800 mb-4">
                             <Text className="text-zinc-300 text-sm leading-6">{post.content}</Text>
                         </View>
                     ))}
                </View>
+
+               {/* SUGESTÕES DE SEGUIDORES */}
+               <Text className="text-zinc-500 font-black text-[10px] uppercase tracking-[4px] mb-5 ml-1 mt-4">Quem seguir</Text>
+               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                 {suggestions.map((item: any) => (
+                   <View key={item.id} className="bg-zinc-900/30 border border-zinc-800 rounded-[35px] p-6 mr-4 items-center w-40">
+                     <Image source={{ uri: item.image || `https://ui-avatars.com/api/?name=${item.name}` }} className="w-16 h-16 rounded-[24px] bg-zinc-800" />
+                     <Text className="text-white font-bold text-xs mt-4 text-center" numberOfLines={1}>{item.name}</Text>
+                     <TouchableOpacity 
+                        onPress={() => toggleFollowUser(item.id).then(() => loadData())}
+                        className="mt-4 bg-emerald-500 py-2.5 px-6 rounded-full"
+                     >
+                       <Text className="text-black font-black text-[10px] uppercase">Seguir</Text>
+                     </TouchableOpacity>
+                   </View>
+                 ))}
+               </ScrollView>
             </View>
           ) : (
             <View>
@@ -262,7 +261,7 @@ export default function ProfileScreen() {
                  </View>
                </View>
 
-               <TouchableOpacity onPress={() => Alert.alert("Sair", "Encerrar sessão?", [{text: "Não"}, {text: "Sair", style: 'destructive', onPress: signOut}])}
+               <TouchableOpacity onPress={() => Alert.alert("Sair", "Deseja encerrar sessão?", [{text: "Não"}, {text: "Sair", style: 'destructive', onPress: signOut}])}
                 className="mt-10 flex-row items-center justify-center p-6 bg-red-500/5 rounded-[35px] border border-red-500/10">
                  <LogOut size={20} color="#ef4444" />
                  <Text className="text-red-500 font-black ml-3 uppercase tracking-widest text-xs">Encerrar Sessão</Text>
@@ -271,7 +270,7 @@ export default function ProfileScreen() {
           )}
         </View>
         
-        <Text className="text-center text-zinc-800 text-[10px] mt-20 font-black uppercase tracking-[6px]">READEEK MOBILE v1.2</Text>
+        <Text className="text-center text-zinc-800 text-[10px] mt-20 font-black uppercase tracking-[6px]">READEEK v1.2</Text>
       </ScrollView>
 
       {/* MODAL EDITAR PERFIL */}
@@ -297,7 +296,7 @@ export default function ProfileScreen() {
       <Modal visible={showChangePassword} animationType="fade" transparent>
         <View className="flex-1 bg-black/95 justify-center px-6">
           <View className="bg-zinc-900 p-8 rounded-[45px] border border-zinc-800 shadow-2xl">
-            <Text className="text-white text-2xl font-black mb-6 text-center">Segurança</Text>
+            <Text className="text-white text-2xl font-black mb-6 text-center tracking-tighter">Segurança</Text>
             <TextInput placeholder="Senha Atual" secureTextEntry value={passwords.current} onChangeText={(t) => setPasswords(p => ({...p, current: t}))} placeholderTextColor="#3f3f46" className="bg-black text-white p-5 rounded-[25px] border border-zinc-800 mb-4" />
             <TextInput placeholder="Nova Senha" secureTextEntry value={passwords.next} onChangeText={(t) => setPasswords(p => ({...p, next: t}))} placeholderTextColor="#3f3f46" className="bg-black text-white p-5 rounded-[25px] border border-zinc-800 mb-6" />
             <TouchableOpacity onPress={async () => { try { await profileService.changePassword(passwords.current, passwords.next); Alert.alert("Sucesso", "Senha alterada!"); setShowChangePassword(false); } catch(e) { Alert.alert("Erro", "Senha incorreta."); } }} className="bg-white p-5 rounded-[25px] items-center"><Text className="text-black font-black uppercase">Confirmar</Text></TouchableOpacity>
