@@ -23,8 +23,11 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Se a Vercel/API retornar 401, deslogamos o usuário no mobile
     if (error.response?.status === 401) {
+      console.log("[Auth] Sessão expirada, limpando storage...");
       await storage.removeToken();
+      await storage.removeUser();
     }
     return Promise.reject(error);
   }
