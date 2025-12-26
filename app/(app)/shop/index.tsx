@@ -1,11 +1,19 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, Image, StatusBar, ActivityIndicator, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Link } from 'expo-router';
+import { useRouter, Link, useFocusEffect } from 'expo-router';
 import { Search, Plus, MapPin, Store, Coins, Bell, MessageCircle, ChevronRight, BookOpen, Star } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { api, getMarketplaceFeed, MarketplaceFeed, MarketProduct } from '../../../lib/api';
-import { Book } from '../_types/book'; // Importando tipo de livro existente
+import { 
+    api, 
+    getMarketplaceFeed, 
+    MarketplaceFeed, 
+    MarketProduct,
+    notificationService, // <--- Importado
+    Notification         // <--- Importado
+} from '../../../lib/api';
+import { Book } from '../_types/book';
+import { NotificationsSheet } from './_components/NotificationsSheet'; // <--- Importado
 
 const { width } = Dimensions.get('window');
 
@@ -16,31 +24,46 @@ export default function MarketplaceScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [notificationsCount, setNotificationsCount] = useState(3); // Mock de notificações
+  
+  // Estados de Notificação
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsCount, setNotificationsCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  // Carregamento de Dados (Feed + Notificações)
+  const loadData = useCallback(async () => {
     try {
-      const [marketData, booksResponse] = await Promise.all([
+      const [marketData, booksResponse, notifData] = await Promise.all([
         getMarketplaceFeed(),
-        api.get('/mobile/books').then(res => res.data).catch(() => []) // Busca livros para sugestão
+        api.get('/mobile/books').then(res => res.data).catch(() => []),
+        notificationService.getAll() // <--- Busca notificações
       ]);
       
       setFeed(marketData);
-      // Pega 5 livros aleatórios ou recentes para sugerir
+      
       if (Array.isArray(booksResponse)) {
         setSuggestedBooks(booksResponse.slice(0, 5)); 
       }
+
+      if (notifData) {
+          setNotifications(notifData.notifications);
+          setNotificationsCount(notifData.unreadCount);
+      }
+
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao carregar marketplace:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  // Recarrega sempre que a tela ganha foco (para atualizar badge de notificação)
+  useFocusEffect(
+    useCallback(() => {
+        loadData();
+    }, [loadData])
+  );
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -52,6 +75,21 @@ export default function MarketplaceScreen() {
     const data = await getMarketplaceFeed(search);
     setFeed(data);
     setLoading(false);
+  };
+
+  // Função para marcar como lida (chamada pelo Modal)
+  const handleMarkAsRead = async (id?: string) => {
+    // Atualização Otimista na UI
+    if (id) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+        setNotificationsCount(prev => Math.max(0, prev - 1));
+    } else {
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        setNotificationsCount(0);
+    }
+    
+    // Chamada API
+    await notificationService.markAsRead(id);
   };
 
   // --- UI COMPONENTS ---
@@ -83,11 +121,12 @@ export default function MarketplaceScreen() {
                         </TouchableOpacity>
                     </Link>
                     
+                    {/* BOTÃO DE NOTIFICAÇÃO ATUALIZADO */}
                     <TouchableOpacity 
                         className="w-9 h-9 items-center justify-center rounded-full bg-zinc-800 relative"
-                        onPress={() => alert("Notificações em breve")}
+                        onPress={() => setShowNotifications(true)}
                     >
-                        <Bell size={18} color="white" />
+                        <Bell size={18} color={notificationsCount > 0 ? "white" : "#71717a"} />
                         {notificationsCount > 0 && (
                             <View className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-zinc-900" />
                         )}
@@ -193,7 +232,6 @@ export default function MarketplaceScreen() {
   const BookSuggestionCard = ({ book }: { book: Book }) => (
     <TouchableOpacity 
         className="mr-3 w-28"
-        // Redireciona para o leitor ou detalhes do livro
         onPress={() => router.push({ pathname: `/read/${book.id}`, params: { hasCover: book.coverUrl ? 'true' : 'false' } })}
     >
         <View className="w-28 h-40 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden mb-2 shadow-lg shadow-black/50">
@@ -215,6 +253,14 @@ export default function MarketplaceScreen() {
         
         <Header />
 
+        {/* SHEET DE NOTIFICAÇÕES */}
+        <NotificationsSheet 
+            visible={showNotifications}
+            notifications={notifications}
+            onClose={() => setShowNotifications(false)}
+            onMarkAsRead={handleMarkAsRead}
+        />
+
         {loading ? (
             <View className="flex-1 justify-center items-center">
                 <ActivityIndicator size="large" color="#10b981" />
@@ -225,7 +271,6 @@ export default function MarketplaceScreen() {
                 contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#10b981" />}
             >
-                
                 <HeroBanner />
 
                 {/* 1. LOJA DE CRÉDITOS */}

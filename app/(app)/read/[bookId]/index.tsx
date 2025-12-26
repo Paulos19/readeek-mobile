@@ -62,7 +62,7 @@ export default function ReaderPage() {
           <GestureDetector gesture={gestures.pinchGesture}>
               <View style={{ flex: 1, position: 'relative' }}>
                   
-                  {/* Laterais Invisíveis */}
+                  {/* Laterais Invisíveis para Navegação */}
                   <Pressable 
                     style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '20%', zIndex: 10, backgroundColor: 'transparent' }}
                     onPress={actions.prevPage}
@@ -82,14 +82,13 @@ export default function ReaderPage() {
                     scrollEnabled={false}
                     bounces={false}
                     onMessage={actions.handleMessage}
+                    onLoadEnd={actions.onWebViewLoaded} // <--- AQUI ESTÁ O GATILHO DA CORREÇÃO
                   />
               </View>
           </GestureDetector>
 
-          {/* RENDERIZAÇÃO CONDICIONAL CORRETA PARA EVITAR WARNINGS */}
           {state.menuVisible && (
               <ReaderMenu 
-                  // visible={state.menuVisible} // Prop removida
                   expanded={state.menuExpanded}
                   activeTab={state.activeTab}
                   theme={THEMES[state.currentTheme]}

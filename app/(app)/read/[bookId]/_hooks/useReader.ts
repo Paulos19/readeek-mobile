@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
-import * as FileSystem from 'expo-file-system/legacy'; // Corrigido import (removido /legacy se usar Expo 50+)
+import * as FileSystem from 'expo-file-system/legacy';
 import { fileManager } from 'lib/files';
 import { syncProgress, highlightService, Highlight } from 'lib/api';
 import { Gesture } from 'react-native-gesture-handler';
@@ -15,6 +15,36 @@ export const THEMES = {
     light: { name: 'Claro', bg: '#ffffff', text: '#000000', ui: 'light' },
     sepia: { name: 'Sépia', bg: '#f6f1d1', text: '#5f4b32', ui: 'light' }
 };
+
+// Script para forçar a geração de paginação e corrigir o "0%"
+const LOCATION_GENERATION_SCRIPT = `
+    if (window.book) {
+        // Aguarda o livro estar pronto
+        window.book.ready.then(() => {
+            // Se ainda não gerou localizações, gera agora (1000 chars por página aprox.)
+            if (window.book.locations.length() === 0) {
+                console.log("Gerando localizações para cálculo de progresso...");
+                // Gera em background para não travar tanto
+                return window.book.locations.generate(1000); 
+            }
+        }).then(() => {
+            console.log("Localizações geradas. Total:", window.book.locations.length());
+            // Força um evento de localização para atualizar a UI imediatamente
+            var currentLocation = window.rendition.currentLocation();
+            if (currentLocation && currentLocation.start) {
+               var cfi = currentLocation.start.cfi;
+               // Agora isso deve retornar um número > 0
+               var percentage = window.book.locations.percentageFromCfi(cfi);
+               
+               window.ReactNativeWebView.postMessage(JSON.stringify({
+                   type: 'LOC',
+                   cfi: cfi,
+                   percentage: percentage
+               }));
+            }
+        }).catch(err => console.log("Erro gerando locations:", err));
+    }
+`;
 
 const flattenToc = (items: any[]): any[] => {
     if (!items || !Array.isArray(items)) return [];
@@ -38,7 +68,7 @@ export function useReader(rawBookId: string | string[]) {
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const navigatingRef = useRef(false);
     
-    // REF PARA SINCRONIZAÇÃO SEGURA NO UNMOUNT
+    // Ref para salvar o último progresso conhecido (para o unmount)
     const latestProgressRef = useRef<{ cfi: string, pct: number } | null>(null);
 
     const bookId = Array.isArray(rawBookId) ? rawBookId[0] : rawBookId;
@@ -73,8 +103,12 @@ export function useReader(rawBookId: string | string[]) {
     useEffect(() => {
         return () => {
             if (latestProgressRef.current) {
-                console.log("[Reader] Salvando progresso ao sair...");
-                syncProgress(bookId, latestProgressRef.current.cfi, latestProgressRef.current.pct);
+                const { cfi, pct } = latestProgressRef.current;
+                // Só salva se tiver dados válidos e progresso > 0 (ou CFI válido)
+                if (cfi && pct >= 0) {
+                    console.log(`[Reader] Salvando progresso ao sair: ${Math.round(pct * 100)}%`);
+                    syncProgress(bookId, cfi, pct);
+                }
             }
         };
     }, [bookId]);
@@ -152,7 +186,8 @@ export function useReader(rawBookId: string | string[]) {
             const data = JSON.parse(event.nativeEvent.data);
             switch(data.type) {
                 case 'LOC':
-                    if (data.percentage !== undefined) { // Check mais seguro que if(data.percentage) pois 0 é falsy
+                    // Aceita 0, mas evita undefined/null
+                    if (typeof data.percentage === 'number') { 
                         const pct = data.percentage;
                         setProgress(pct);
                         
@@ -163,11 +198,11 @@ export function useReader(rawBookId: string | string[]) {
 
                         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
                         
-                        // Salva localmente imediatamente para responsividade da UI
+                        // Salva localmente imediatamente
                         AsyncStorage.setItem(`@progress:${bookId}`, data.cfi);
                         AsyncStorage.setItem(`@percent:${bookId}`, pct.toString());
 
-                        // Debounce apenas para a API
+                        // Debounce para API (2 segundos)
                         syncTimeoutRef.current = setTimeout(() => {
                             syncProgress(bookId, data.cfi, pct);
                         }, 2000);
@@ -183,6 +218,11 @@ export function useReader(rawBookId: string | string[]) {
             }
         } catch (e) {}
     }, [bookId, menuVisible, fontSize]);
+
+    const onWebViewLoaded = () => {
+        // Injeta o script de correção de progresso assim que carregar
+        webviewRef.current?.injectJavaScript(LOCATION_GENERATION_SCRIPT);
+    };
 
     const toggleMenu = () => {
         if (menuVisible) { setMenuVisible(false); setMenuExpanded(false); }
@@ -231,7 +271,7 @@ export function useReader(rawBookId: string | string[]) {
 
     return {
         state: { isLoading, bookBase64, initialLocation, highlights, toc, fontSize, currentTheme, selection, menuVisible, menuExpanded, activeTab, progress },
-        actions: { setMenuVisible, setMenuExpanded, setActiveTab, toggleMenu, changeTheme, changeFontSize, goToChapter, nextPage, prevPage, addHighlight, removeHighlight, handleMessage, setSelection },
+        actions: { setMenuVisible, setMenuExpanded, setActiveTab, toggleMenu, changeTheme, changeFontSize, goToChapter, nextPage, prevPage, addHighlight, removeHighlight, handleMessage, setSelection, onWebViewLoaded },
         refs: { webviewRef },
         gestures: { pinchGesture }
     };

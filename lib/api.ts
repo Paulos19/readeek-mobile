@@ -13,6 +13,23 @@ export const api = axios.create({
   },
 });
 
+// --- INTERCEPTORS ---
+api.interceptors.request.use(async (config) => {
+  const token = await storage.getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      await storage.removeToken();
+    }
+    return Promise.reject(error);
+  }
+);
+
 export interface Highlight {
     id: string;
     cfiRange: string;
@@ -50,7 +67,7 @@ export interface ProductDetailsResponse {
     };
   };
   relatedProducts: MarketProduct[];
-  communityBooks: Book[]; // Reutiliza seu tipo Book existente
+  communityBooks: Book[]; 
 }
 
 export interface MarketProduct {
@@ -60,7 +77,7 @@ export interface MarketProduct {
   price: number;
   currency: 'BRL' | 'CREDITS' | 'TRADE';
   address: string;
-  stock: number; // <--- Adicionado aqui!
+  stock: number;
   images: ProductImage[];
   shop?: {
       name: string;
@@ -81,7 +98,6 @@ export interface MarketplaceFeed {
   shops: MarketShop[];
 }
 
-// === ADICIONE ISTO: Interface para o Ranking de Usuários ===
 export interface RankingUser {
   id: string;
   name: string;
@@ -95,9 +111,9 @@ export interface Message {
   content: string | null;
   imageUrl?: string | null;
   audioUrl?: string | null;
-  fileUrl?: string | null;   // <--- NOVO
-  fileName?: string | null;  // <--- NOVO
-  fileSize?: number | null;  // <--- NOVO
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
   type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE';
   createdAt: string;
   senderId: string;
@@ -115,13 +131,23 @@ export interface Conversation {
   updatedAt: string;
   participants: { id: string; name: string; image: string | null }[];
   product?: { title: string; images: { url: string }[] };
-  messages: Message[]; // Apenas a última
+  messages: Message[];
 }
 
 export interface UserPreferences {
   wallpaperUrl: string | null;
   myBubbleColor: string;
   otherBubbleColor: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'SALE' | 'MESSAGE' | 'SYSTEM' | 'ORDER';
+  read: boolean;
+  link?: string | null;
+  createdAt: string;
 }
 
 // ==========================================================
@@ -135,7 +161,8 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// === ADICIONE ISTO: Função para buscar o Ranking ===
+// --- FUNÇÕES DE USUÁRIO E SEGUIR (CORRIGIDO) ---
+
 export const getRanking = async (): Promise<RankingUser[]> => {
   try {
     const { data } = await api.get('/mobile/ranking');
@@ -145,6 +172,23 @@ export const getRanking = async (): Promise<RankingUser[]> => {
     return [];
   }
 };
+
+export const fetchUserProfile = async (userId: string): Promise<PublicUserProfile | null> => {
+  try {
+    const { data } = await api.get(`/mobile/users/${userId}`);
+    return data;
+  } catch (error) {
+    console.error("Erro ao buscar perfil:", error);
+    return null;
+  }
+};
+
+// *** ESTA É A FUNÇÃO QUE FALTAVA ***
+export const toggleFollowUser = async (userId: string) => {
+  const { data } = await api.post(`/mobile/users/${userId}/follow`);
+  return data; // Retorna { isFollowing: boolean }
+};
+
 // ===================================================
 
 export const syncProgress = async (bookId: string, cfi: string, percentage: number) => {
@@ -367,7 +411,6 @@ export const communityService = {
   }
 };
 
-// --- SERVIÇO SOCIAL PRINCIPAL (FEED) ---
 export const socialService = {
   getFeed: async () => {
     const res = await api.get('/mobile/social/feed');
@@ -444,16 +487,6 @@ export const socialService = {
   toggleCommentLike: async (commentId: string) => {
     const res = await api.post(`/mobile/social/comments/${commentId}/react`);
     return res.data; 
-  }
-};
-
-export const fetchUserProfile = async (userId: string): Promise<PublicUserProfile | null> => {
-  try {
-    const { data } = await api.get(`/mobile/users/${userId}`);
-    return data;
-  } catch (error) {
-    console.error("Erro ao buscar perfil:", error);
-    return null;
   }
 };
 
@@ -560,7 +593,6 @@ export const buyProductWithCredits = async (productId: string) => {
     const { data } = await api.post(`/mobile/marketplace/products/${productId}/buy`);
     return { success: true, data };
   } catch (error: any) {
-    // Retorna o erro tratado para exibir o alerta correto
     return { 
       success: false, 
       error: error.response?.data?.error || "Erro ao realizar compra" 
@@ -579,7 +611,7 @@ export const getMyConversations = async (): Promise<Conversation[]> => {
 
 export const startConversation = async (targetUserId: string, productId?: string) => {
   const { data } = await api.post('/mobile/chat', { targetUserId, productId });
-  return data; // Retorna objeto Conversation com ID
+  return data; 
 };
 
 export const getMessages = async (conversationId: string): Promise<Message[]> => {
@@ -593,7 +625,7 @@ export const sendMessage = async (
   imageUri?: string,
   audioUri?: string,
   replyToId?: string,
-  fileAsset?: { uri: string; name: string; mimeType: string; size?: number } // <--- NOVO PARÂMETRO
+  fileAsset?: { uri: string; name: string; mimeType: string; size?: number }
 ) => {
   const formData = new FormData();
   
@@ -629,7 +661,6 @@ export const sendMessage = async (
   return data;
 };
 
-// Nova função de Delete em Batch
 export const deleteMessages = async (messageIds: string[], type: 'ME' | 'EVERYONE') => {
   const { data } = await api.post('/mobile/chat/messages/delete', { messageIds, type });
   return data;
@@ -665,7 +696,6 @@ export const saveUserPreferences = async (
       type,
     } as any);
   } else if (wallpaperUri === null) {
-    // Se for explicitamente null, sinaliza para remover
     formData.append('removeWallpaper', 'true');
   }
 
@@ -682,13 +712,52 @@ export const saveUserPreferences = async (
 
 export const deleteBook = async (bookId: string) => {
   try {
-    // Rota backend para deletar o livro
     await api.delete(`/mobile/books/${bookId}`);
     return true;
   } catch (error) {
     console.error('Erro ao deletar livro:', error);
     return false;
   }
+};
+
+export const notificationService = {
+  getAll: async () => {
+    try {
+      const { data } = await api.get('/mobile/notifications');
+      return data as { notifications: Notification[], unreadCount: number };
+    } catch (error) {
+      console.error("Erro ao buscar notificações", error);
+      return { notifications: [], unreadCount: 0 };
+    }
+  },
+
+  markAsRead: async (notificationId?: string) => {
+    try {
+      await api.patch('/mobile/notifications', { notificationId });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+};
+
+export const getMarketplaceStatus = async () => {
+  try {
+    const { data } = await api.get('/mobile/marketplace/status');
+    return data.latestProductAt as string | null;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const getProfileStats = async () => {
+  const { data } = await api.get('/mobile/profile/stats');
+  return data;
+};
+
+export const logout = async () => {
+  // Limpar storage local é feito no store, mas podemos ter um log de analytics aqui
+  return true;
 };
 
 export { PublicUserProfile };

@@ -1,332 +1,274 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, Text, TouchableOpacity, Image, ScrollView, 
-  Modal, TextInput, ActivityIndicator, Alert, Switch 
+  Modal, TextInput, ActivityIndicator, Alert, Switch, StatusBar 
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker'; // Importar ImagePicker
+import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { 
-  LogOut, User as UserIcon, Settings, ChevronRight, 
-  Lock, Shield, Mail, Edit3, X, Save, Camera 
+  LogOut, Settings, ChevronRight, Lock, Shield, 
+  Edit3, X, Save, Camera, Book, Star, Users, 
+  CreditCard, LayoutGrid, Eye, EyeOff, KeyRound, ArrowRight
 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeIn, FadeInDown, FadeInRight } from 'react-native-reanimated';
 
-import { useAuthStore } from 'stores/useAuthStore';
-import { profileService } from 'lib/api';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { profileService, getProfileStats, toggleFollowUser } from '../../lib/api';
 
-// ... (Componentes SettingItem e SectionHeader mantêm-se iguais) ...
-const SettingItem = ({ icon: Icon, label, value, onPress, isDestructive = false }: any) => (
-  <TouchableOpacity 
-    onPress={onPress}
-    className="flex-row items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800 active:bg-zinc-800"
-  >
-    <View className="flex-row items-center gap-3">
-      <View className={`p-2 rounded-lg ${isDestructive ? 'bg-red-500/10' : 'bg-zinc-800'}`}>
-        <Icon size={18} color={isDestructive ? '#ef4444' : '#a1a1aa'} />
-      </View>
-      <Text className={`${isDestructive ? 'text-red-500' : 'text-zinc-200'} font-medium`}>
-        {label}
-      </Text>
-    </View>
-    <View className="flex-row items-center gap-2">
-      {value && <Text className="text-zinc-500 text-sm">{value}</Text>}
-      <ChevronRight size={16} color="#52525b" />
-    </View>
-  </TouchableOpacity>
+// --- COMPONENTES AUXILIARES ---
+const StatCard = ({ label, value, icon: Icon }: any) => (
+  <View className="items-center justify-center bg-zinc-900/50 border border-zinc-800 rounded-3xl p-4 flex-1 mx-1 shadow-sm">
+    <Icon size={16} color="#71717a" className="mb-1" />
+    <Text className="text-white font-black text-xl">{value}</Text>
+    <Text className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{label}</Text>
+  </View>
 );
 
-const SectionHeader = ({ title }: { title: string }) => (
-  <Text className="text-zinc-500 text-xs font-bold uppercase tracking-wider px-4 mt-6 mb-2">
-    {title}
-  </Text>
-);
-
-export default function Profile() {
+export default function ProfileScreen() {
   const { user, signOut, updateUser } = useAuthStore();
+  const router = useRouter();
   
-  // Modals
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any>(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [activeTab, setActiveTab] = useState<'content' | 'settings'>('content');
+
+  // Forms
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-
-  // Edit Profile Form
   const [name, setName] = useState(user?.name || '');
   const [about, setAbout] = useState(user?.about || '');
   const [isPublic, setIsPublic] = useState(user?.profileVisibility === 'PUBLIC');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null); // Estado para nova imagem
-  
-  const [loading, setLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [passwords, setPasswords] = useState({ current: '', next: '' });
 
-  // Password Form
-  const [currentPass, setCurrentPass] = useState('');
-  const [newPass, setNewPass] = useState('');
+  useEffect(() => { loadData(); }, []);
 
-  // --- FUNÇÃO DE ESCOLHER FOTO ---
-  const handlePickImage = async () => {
+  const loadData = async () => {
     try {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1], // Avatar quadrado
-            quality: 0.8,   // Compressão leve
-        });
+      const data = await getProfileStats();
+      setStats(data.stats);
+      setSuggestions(data.suggestions);
+    } catch (e: any) {
+      if (e.response?.status === 401) {
+        signOut();
+        router.replace('/login');
+      }
+    } finally { setLoading(false); }
+  };
 
-        if (!result.canceled) {
-            setSelectedImage(result.assets[0].uri);
-        }
-    } catch (error) {
-        Alert.alert("Erro", "Não foi possível abrir a galeria.");
-    }
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (!result.canceled) setSelectedImage(result.assets[0].uri);
   };
 
   const handleUpdateProfile = async () => {
     try {
       setLoading(true);
-      
-      // Envia os dados (se selectedImage existir, a API trata como upload)
       const updatedUser = await profileService.update({
-        name,
-        about,
+        name, about,
         profileVisibility: isPublic ? 'PUBLIC' : 'PRIVATE',
-        image: selectedImage || undefined // Só envia se tiver selecionado uma nova
+        image: selectedImage || undefined
       });
-      
-      // Atualiza a store global com os dados que retornaram do backend (incluindo a nova URL do blob)
       updateUser(updatedUser);
-      
       Alert.alert("Sucesso", "Perfil atualizado!");
       setShowEditProfile(false);
-      setSelectedImage(null); // Reseta a seleção temporária
-
+      loadData();
     } catch (error) {
-      console.error(error);
-      Alert.alert("Erro", "Falha ao atualizar perfil.");
-    } finally {
-      setLoading(false);
-    }
+      Alert.alert("Erro", "Falha ao salvar.");
+    } finally { setLoading(false); }
   };
 
-  // ... (handleChangePassword mantém-se igual) ...
-  const handleChangePassword = async () => {
-    if (!currentPass || !newPass) return Alert.alert("Erro", "Preencha todos os campos");
-    try {
-      setLoading(true);
-      await profileService.changePassword(currentPass, newPass);
-      Alert.alert("Sucesso", "Senha alterada com sucesso!");
-      setShowChangePassword(false);
-      setCurrentPass('');
-      setNewPass('');
-    } catch (error) {
-      Alert.alert("Erro", "Senha atual incorreta ou erro no servidor.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (loading && !stats) return (
+    <View className="flex-1 bg-black items-center justify-center">
+      <ActivityIndicator size="large" color="#10b981" />
+      <Text className="text-zinc-500 mt-4 font-medium">Carregando perfil...</Text>
+    </View>
+  );
 
   return (
     <View className="flex-1 bg-black">
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+      <StatusBar barStyle="light-content" />
+      
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         {/* HEADER */}
-        <View className="bg-zinc-900 pt-16 pb-8 px-6 rounded-b-[32px] border-b border-zinc-800">
-          <View className="items-center">
-            {/* AVATAR COM EDIT BUTTON */}
-            <View className="w-24 h-24 bg-zinc-800 rounded-full items-center justify-center border-4 border-zinc-950 mb-4 overflow-hidden relative shadow-xl">
-               {user?.image ? (
-                 <Image source={{ uri: user.image }} className="w-full h-full" />
-               ) : (
-                 <UserIcon size={40} color="#52525b" />
-               )}
-               <TouchableOpacity 
-                 className="absolute bottom-0 w-full bg-black/60 py-1 items-center"
-                 onPress={() => setShowEditProfile(true)}
-               >
-                 <Edit3 size={12} color="white" />
-               </TouchableOpacity>
-            </View>
+        <View className="h-[340px] relative">
+          <LinearGradient colors={['#064e3b', '#022c22', '#000000']} className="absolute inset-0 h-72" />
+          
+          <View className="px-6 flex-row justify-between items-center mt-12">
+            <Text className="text-white font-black text-2xl tracking-tighter">Conta</Text>
+            <TouchableOpacity onPress={() => setShowEditProfile(true)} className="bg-white/10 p-2.5 rounded-full border border-white/10">
+              <Settings size={20} color="white" />
+            </TouchableOpacity>
+          </View>
 
-            <Text className="text-white text-2xl font-bold">{user?.name || 'Leitor'}</Text>
-            <Text className="text-zinc-500 text-sm mb-4">{user?.email}</Text>
-            
-            <View className="flex-row gap-2">
-                <View className="bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                    <Text className="text-emerald-500 text-xs font-bold">{user?.credits || 0} Créditos</Text>
+          <View className="absolute bottom-0 left-0 right-0 px-6 items-center">
+            <Animated.View entering={FadeInDown.delay(200)} className="items-center">
+              <View className="relative">
+                <Image 
+                  source={{ uri: user?.image || `https://ui-avatars.com/api/?name=${user?.name}` }} 
+                  className="w-32 h-32 rounded-[40px] border-4 border-black bg-zinc-900"
+                />
+                <View className="absolute -bottom-1 -right-1 bg-emerald-500 w-8 h-8 rounded-full border-4 border-black items-center justify-center">
+                   <View className="w-2 h-2 rounded-full bg-white" />
                 </View>
-                <View className="bg-zinc-800 px-3 py-1 rounded-full border border-zinc-700">
-                    <Text className="text-zinc-400 text-xs font-bold capitalize">{user?.role === 'ADMIN' ? 'Admin' : 'Leitor'}</Text>
-                </View>
-            </View>
+              </View>
+              <Text className="text-white text-3xl font-black mt-4 tracking-tight">{user?.name}</Text>
+              <Text className="text-zinc-500 font-bold">@{user?.email?.split('@')[0]}</Text>
+              
+              <View className="mt-2 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                <Text className="text-emerald-500 text-[10px] font-black uppercase tracking-widest">{stats?.role || 'MEMBRO'}</Text>
+              </View>
+            </Animated.View>
           </View>
         </View>
 
-        {/* SETTINGS GROUPS (Igual ao anterior) */}
-        <View className="mt-6">
-          <SectionHeader title="Conta" />
-          <View className="mx-4 rounded-xl overflow-hidden">
-            <SettingItem 
-              icon={UserIcon} 
-              label="Editar Perfil" 
-              value="Nome, Foto, Bio" 
-              onPress={() => setShowEditProfile(true)} 
-            />
-            <SettingItem 
-              icon={Shield} 
-              label="Privacidade" 
-              value={isPublic ? 'Público' : 'Privado'} 
-              onPress={() => setShowEditProfile(true)} 
-            />
-          </View>
-          {/* ... Restante dos itens ... */}
-           <SectionHeader title="Segurança" />
-          <View className="mx-4 rounded-xl overflow-hidden">
-            <SettingItem 
-              icon={Lock} 
-              label="Alterar Senha" 
-              onPress={() => setShowChangePassword(true)} 
-            />
+        {/* MÉTRIQUES */}
+        <Animated.View entering={FadeIn.delay(400)} className="flex-row justify-between px-5 mt-8">
+          <StatCard label="Seguidores" value={stats?._count?.followers || 0} icon={Users} />
+          <StatCard label="Seguindo" value={stats?._count?.following || 0} icon={Users} />
+          <StatCard label="Livros" value={stats?._count?.books || 0} icon={Book} />
+        </Animated.View>
+
+        {/* BIO & CRÉDITOS */}
+        <View className="px-6 mt-8">
+          <View className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-5 mb-6 flex-row items-center">
+             <View className="w-12 h-12 bg-amber-500/10 rounded-2xl items-center justify-center mr-4">
+                <CreditCard size={24} color="#fbbf24" />
+             </View>
+             <View className="flex-1">
+                <Text className="text-zinc-500 text-[10px] font-black uppercase">Saldo Readeek</Text>
+                <Text className="text-white font-black text-xl">{stats?.credits || 0} Créditos</Text>
+             </View>
+             <TouchableOpacity className="bg-zinc-800 p-2 rounded-xl">
+                <ArrowRight size={16} color="#fbbf24" />
+             </TouchableOpacity>
           </View>
 
-          <SectionHeader title="Sessão" />
-          <View className="mx-4 rounded-xl overflow-hidden">
-            <SettingItem 
-              icon={LogOut} 
-              label="Sair da Conta" 
-              isDestructive 
-              onPress={() => {
-                Alert.alert("Sair", "Tem certeza que deseja sair?", [
-                  { text: "Cancelar", style: "cancel" },
-                  { text: "Sair", style: 'destructive', onPress: signOut }
-                ])
-              }} 
-            />
+          <Text className="text-zinc-400 text-center leading-5 text-sm italic px-4">
+            "{user?.about || 'Apaixonado por livros e novas histórias...'}"
+          </Text>
+        </View>
+
+        {/* TABS */}
+        <View className="mt-10 px-6">
+          <View className="flex-row bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800 mb-6">
+            <TouchableOpacity onPress={() => setActiveTab('content')} className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'content' ? 'bg-zinc-800' : ''}`}>
+              <LayoutGrid size={18} color={activeTab === 'content' ? 'white' : '#71717a'} />
+              <Text className={`font-bold ml-2 ${activeTab === 'content' ? 'text-white' : 'text-zinc-500'}`}>Estante</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab('settings')} className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'settings' ? 'bg-zinc-800' : ''}`}>
+              <Shield size={18} color={activeTab === 'settings' ? 'white' : '#71717a'} />
+              <Text className={`font-bold ml-2 ${activeTab === 'settings' ? 'text-white' : 'text-zinc-500'}`}>Segurança</Text>
+            </TouchableOpacity>
           </View>
+
+          {activeTab === 'content' ? (
+            <Animated.View entering={FadeInRight}>
+               <TouchableOpacity onPress={() => router.push('/library' as any)} className="flex-row items-center bg-zinc-900 p-5 rounded-3xl border border-zinc-800 mb-3">
+                 <View className="w-12 h-12 bg-emerald-500/20 rounded-2xl items-center justify-center mr-4"><Book size={24} color="#10b981" /></View>
+                 <View className="flex-1"><Text className="text-white font-bold text-lg">Minha Biblioteca</Text><Text className="text-zinc-500 text-xs">Acesse seus EPUBs salvos</Text></View>
+                 <ChevronRight size={20} color="#3f3f46" />
+               </TouchableOpacity>
+               
+               <TouchableOpacity onPress={() => router.push('/(app)/dashboard/highlights' as any)} className="flex-row items-center bg-zinc-900 p-5 rounded-3xl border border-zinc-800 mb-8">
+                 <View className="w-12 h-12 bg-amber-500/20 rounded-2xl items-center justify-center mr-4"><Star size={24} color="#fbbf24" /></View>
+                 <View className="flex-1"><Text className="text-white font-bold text-lg">Destaques</Text><Text className="text-zinc-500 text-xs">Citações e anotações</Text></View>
+                 <ChevronRight size={20} color="#3f3f46" />
+               </TouchableOpacity>
+               
+               <Text className="text-zinc-500 font-black text-[10px] uppercase tracking-[3px] mb-4 ml-1">Quem seguir</Text>
+               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                 {suggestions.map((item: any) => (
+                   <View key={item.id} className="bg-zinc-900/40 border border-zinc-800 rounded-3xl p-4 mr-4 items-center w-36">
+                     <Image source={{ uri: item.image || `https://ui-avatars.com/api/?name=${item.name}` }} className="w-14 h-14 rounded-2xl bg-zinc-800" />
+                     <Text className="text-white font-bold text-xs mt-3" numberOfLines={1}>{item.name}</Text>
+                     <TouchableOpacity onPress={() => toggleFollowUser(item.id).then(() => loadData())} className="mt-3 bg-white py-1.5 px-4 rounded-full">
+                       <Text className="text-black font-black text-[10px]">SEGUIR</Text>
+                     </TouchableOpacity>
+                   </View>
+                 ))}
+               </ScrollView>
+            </Animated.View>
+          ) : (
+            <Animated.View entering={FadeInRight}>
+               <View className="bg-zinc-900 rounded-3xl border border-zinc-800 overflow-hidden">
+                 <TouchableOpacity onPress={() => setShowChangePassword(true)} className="flex-row items-center p-5 border-b border-zinc-800">
+                   <KeyRound size={20} color="#a1a1aa" /><Text className="text-zinc-200 font-bold ml-4">Alterar Senha</Text>
+                   <View className="flex-1" /><ChevronRight size={18} color="#3f3f46" />
+                 </TouchableOpacity>
+                 <View className="flex-row items-center p-5">
+                   <Shield size={20} color="#a1a1aa" />
+                   <View className="ml-4 flex-1"><Text className="text-zinc-200 font-bold">Perfil Visível</Text><Text className="text-zinc-500 text-[10px]">Público para outros leitores</Text></View>
+                   <Switch value={isPublic} onValueChange={(v) => { setIsPublic(v); handleUpdateProfile(); }} trackColor={{ true: '#10b981' }} />
+                 </View>
+               </View>
+
+               <TouchableOpacity onPress={() => Alert.alert("Sair", "Deseja encerrar sessão?", [{text: "Não"}, {text: "Sair", style: 'destructive', onPress: () => { signOut(); router.replace('/login'); }}])}
+                className="mt-10 flex-row items-center justify-center p-5 bg-red-500/10 rounded-3xl border border-red-500/20">
+                 <LogOut size={20} color="#ef4444" /><Text className="text-red-500 font-black ml-3">DESCONECTAR</Text>
+               </TouchableOpacity>
+            </Animated.View>
+          )}
         </View>
       </ScrollView>
 
-      {/* --- MODAL EDITAR PERFIL --- */}
+      {/* MODAL EDITAR PERFIL */}
       <Modal visible={showEditProfile} animationType="slide" presentationStyle="pageSheet">
         <View className="flex-1 bg-zinc-950">
-          <View className="flex-row justify-between items-center p-4 border-b border-zinc-800">
-            <Text className="text-white text-lg font-bold">Editar Perfil</Text>
-            <TouchableOpacity onPress={() => setShowEditProfile(false)}>
-              <X size={24} color="#a1a1aa" />
-            </TouchableOpacity>
+          <View className="flex-row justify-between items-center p-6 border-b border-zinc-900">
+            <Text className="text-white text-xl font-black">Meu Perfil</Text>
+            <TouchableOpacity onPress={() => setShowEditProfile(false)}><X size={24} color="white" /></TouchableOpacity>
           </View>
-          
-          <ScrollView className="p-6">
+          <ScrollView className="px-6 pt-8">
+            <View className="items-center mb-10">
+              <TouchableOpacity onPress={handlePickImage} className="relative">
+                <Image source={{ uri: selectedImage || user?.image || `https://ui-avatars.com/api/?name=${user?.name}` }} className="w-32 h-32 rounded-[45px] bg-zinc-900" />
+                <View className="absolute bottom-0 right-0 bg-emerald-500 p-2 rounded-2xl border-4 border-zinc-950"><Camera size={20} color="white" /></View>
+              </TouchableOpacity>
+            </View>
+            <Text className="text-zinc-500 text-[10px] font-black uppercase mb-2 ml-1">Nome Público</Text>
+            <TextInput value={name} onChangeText={setName} placeholderTextColor="#3f3f46" className="bg-zinc-900 text-white p-5 rounded-2xl border border-zinc-800 mb-6 font-bold" />
             
-            {/* SELEÇÃO DE FOTO DENTRO DO MODAL */}
-            <View className="items-center mb-8">
-                <TouchableOpacity onPress={handlePickImage} className="relative">
-                    <View className="w-28 h-28 bg-zinc-900 rounded-full items-center justify-center border border-zinc-800 overflow-hidden">
-                        {/* Mostra a imagem selecionada temporariamente OU a atual do usuário */}
-                        {selectedImage ? (
-                            <Image source={{ uri: selectedImage }} className="w-full h-full" />
-                        ) : user?.image ? (
-                            <Image source={{ uri: user.image }} className="w-full h-full" />
-                        ) : (
-                            <UserIcon size={40} color="#52525b" />
-                        )}
-                    </View>
-                    <View className="absolute bottom-0 right-0 bg-emerald-500 p-2 rounded-full border-4 border-zinc-950">
-                        <Camera size={16} color="white" />
-                    </View>
-                </TouchableOpacity>
-                <Text className="text-zinc-500 text-xs mt-2">Toque para alterar a foto</Text>
-            </View>
-
-            {/* FORMULÁRIO DE TEXTO */}
-            <View className="mb-6">
-              <Text className="text-zinc-400 text-sm mb-2 font-medium">Nome de Exibição</Text>
-              <TextInput 
-                value={name}
-                onChangeText={setName}
-                className="bg-zinc-900 text-white p-4 rounded-xl border border-zinc-800 focus:border-emerald-500"
-                placeholderTextColor="#52525b"
-              />
-            </View>
-
-            <View className="mb-6">
-              <Text className="text-zinc-400 text-sm mb-2 font-medium">Sobre mim</Text>
-              <TextInput 
-                value={about}
-                onChangeText={setAbout}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                className="bg-zinc-900 text-white p-4 rounded-xl border border-zinc-800 focus:border-emerald-500 min-h-[100px]"
-                placeholder="Conte um pouco sobre você..."
-                placeholderTextColor="#52525b"
-              />
-            </View>
-
-            <View className="flex-row items-center justify-between bg-zinc-900 p-4 rounded-xl border border-zinc-800 mb-8">
-               <View>
-                 <Text className="text-white font-medium">Perfil Público</Text>
-                 <Text className="text-zinc-500 text-xs">Outros usuários podem ver suas estantes</Text>
-               </View>
-               <Switch 
-                 value={isPublic} 
-                 onValueChange={setIsPublic} 
-                 trackColor={{ false: '#3f3f46', true: '#10b981' }}
-                 thumbColor="#fff"
-               />
-            </View>
-
-            <TouchableOpacity 
-              onPress={handleUpdateProfile}
-              disabled={loading}
-              className="bg-emerald-500 p-4 rounded-xl flex-row justify-center items-center active:opacity-90"
-            >
-              {loading ? <ActivityIndicator color="white" /> : (
-                <>
-                  <Save size={20} color="white" />
-                  <Text className="text-white font-bold ml-2">Salvar Alterações</Text>
-                </>
-              )}
+            <Text className="text-zinc-500 text-[10px] font-black uppercase mb-2 ml-1">Bio / Status</Text>
+            <TextInput value={about} onChangeText={setAbout} multiline placeholder="Conte algo sobre você..." placeholderTextColor="#3f3f46" className="bg-zinc-900 text-white p-5 rounded-2xl border border-zinc-800 min-h-[120px]" />
+            
+            <TouchableOpacity onPress={handleUpdateProfile} className="bg-emerald-500 p-5 rounded-3xl mt-10 shadow-lg flex-row justify-center items-center">
+              <Save size={20} color="black" /><Text className="text-black font-black ml-2">SALVAR ALTERAÇÕES</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
       </Modal>
 
-      {/* Modal Change Password (Mantido igual) */}
-      <Modal visible={showChangePassword} animationType="slide" transparent>
-        {/* ... (código do modal de senha igual ao anterior) ... */}
-         <View className="flex-1 bg-black/80 justify-end">
-          <View className="bg-zinc-900 rounded-t-[32px] p-6 h-[60%]">
-             <View className="w-12 h-1 bg-zinc-700 rounded-full self-center mb-6" />
-             <Text className="text-white text-xl font-bold mb-6">Alterar Senha</Text>
-             
-             <View className="gap-4">
-               <View>
-                 <Text className="text-zinc-400 text-sm mb-2">Senha Atual</Text>
-                 <TextInput 
-                    value={currentPass}
-                    onChangeText={setCurrentPass}
-                    secureTextEntry
-                    className="bg-zinc-950 text-white p-4 rounded-xl border border-zinc-800"
-                 />
-               </View>
-               
-               <View>
-                 <Text className="text-zinc-400 text-sm mb-2">Nova Senha</Text>
-                 <TextInput 
-                    value={newPass}
-                    onChangeText={setNewPass}
-                    secureTextEntry
-                    className="bg-zinc-950 text-white p-4 rounded-xl border border-zinc-800"
-                 />
-               </View>
+      {/* MODAL ALTERAR SENHA */}
+      <Modal visible={showChangePassword} animationType="fade" transparent>
+        <View className="flex-1 bg-black/90 justify-center px-6">
+          <View className="bg-zinc-900 p-8 rounded-[40px] border border-zinc-800">
+            <Text className="text-white text-2xl font-black mb-2 text-center">Segurança</Text>
+            <Text className="text-zinc-500 text-center mb-8 text-sm">Atualize sua senha de acesso</Text>
+            
+            <TextInput placeholder="Senha Atual" secureTextEntry value={passwords.current} onChangeText={(t) => setPasswords(p => ({...p, current: t}))} placeholderTextColor="#3f3f46" className="bg-black text-white p-5 rounded-2xl border border-zinc-800 mb-4" />
+            <TextInput placeholder="Nova Senha" secureTextEntry value={passwords.next} onChangeText={(t) => setPasswords(p => ({...p, next: t}))} placeholderTextColor="#3f3f46" className="bg-black text-white p-5 rounded-2xl border border-zinc-800 mb-6" />
 
-               <TouchableOpacity 
-                  onPress={handleChangePassword}
-                  disabled={loading}
-                  className="bg-emerald-500 p-4 rounded-xl items-center mt-4"
-                >
-                  {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold">Atualizar Senha</Text>}
-               </TouchableOpacity>
-               
-               <TouchableOpacity onPress={() => setShowChangePassword(false)} className="p-4 items-center">
-                 <Text className="text-zinc-500 font-medium">Cancelar</Text>
-               </TouchableOpacity>
-             </View>
+            <TouchableOpacity onPress={async () => {
+              try {
+                await profileService.changePassword(passwords.current, passwords.next);
+                Alert.alert("Sucesso", "Senha alterada!");
+                setShowChangePassword(false);
+              } catch(e) { Alert.alert("Erro", "Senha atual incorreta."); }
+            }} className="bg-white p-5 rounded-3xl items-center">
+              <Text className="text-black font-black">CONFIRMAR TROCA</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setShowChangePassword(false)} className="mt-4 items-center">
+              <Text className="text-zinc-500 font-bold">Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
