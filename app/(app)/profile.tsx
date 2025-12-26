@@ -1,114 +1,423 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { 
   View, Text, TouchableOpacity, Image, ScrollView, 
-  Modal, TextInput, ActivityIndicator, Alert, Switch, StatusBar, Dimensions 
+  Modal, TextInput, ActivityIndicator, Alert, Switch, StatusBar, FlatList 
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { 
-  LogOut, Settings, ChevronRight, Lock, Shield, 
-  Edit3, X, Save, Camera, Book, Star, Users, 
-  CreditCard, LayoutGrid, Eye, KeyRound, MessageSquare, Plus
+  LogOut, Settings, ChevronRight, Shield, X, 
+  Camera, Book, Users, LayoutGrid, 
+  KeyRound, MessageSquare, Edit3, Search, Wifi
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
+// Stores & Services
 import { useAuthStore } from '../../stores/useAuthStore';
 import { profileService, getProfileStats, toggleFollowUser, api } from '../../lib/api';
 
-const { width } = Dimensions.get('window');
+// --- TYPES ---
+type TabOption = 'activity' | 'security';
+type ModalType = 'none' | 'followers' | 'following' | 'posts';
 
-// --- COMPONENTES DE APOIO ---
+// --- 1. COMPONENTES ATÔMICOS (ISOLADOS) ---
 
-const StatCard = ({ label, value, icon: Icon }: any) => (
-  <View className="items-center justify-center bg-zinc-900/50 border border-zinc-800 rounded-3xl p-4 flex-1 mx-1 shadow-sm">
-    <Icon size={16} color="#71717a" className="mb-1" />
-    <Text className="text-white font-black text-xl">{value}</Text>
-    <Text className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{label}</Text>
+/**
+ * ListModal: Modal genérico de alta performance para listagens com busca.
+ */
+const ListModal = React.memo(({ 
+  visible, 
+  title, 
+  onClose, 
+  data, 
+  renderItem, 
+  searchPlaceholder = "Buscar...",
+  emptyMessage = "Nada encontrado."
+}: { 
+  visible: boolean; 
+  title: string; 
+  onClose: () => void; 
+  data: any[]; 
+  renderItem: (item: any) => React.ReactElement; 
+  searchPlaceholder?: string;
+  emptyMessage?: string;
+}) => {
+  const [query, setQuery] = useState('');
+
+  // Filtro local (Client-side)
+  const filteredData = useMemo(() => {
+    if (!query) return data;
+    return data.filter(item => {
+      const searchTarget = item.name || item.title || item.content || '';
+      return searchTarget.toLowerCase().includes(query.toLowerCase());
+    });
+  }, [data, query]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View className="flex-1 bg-zinc-950">
+        {/* Header Modal */}
+        <View className="px-6 py-4 border-b border-zinc-900 flex-row justify-between items-center bg-zinc-950">
+          <Text className="text-white font-black text-xl tracking-tight">{title}</Text>
+          <TouchableOpacity onPress={onClose} className="bg-zinc-900 p-2 rounded-full">
+            <X size={20} color="#e4e4e7" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search Bar */}
+        <View className="px-6 py-4">
+          <View className="flex-row items-center bg-zinc-900 px-4 py-3 rounded-2xl border border-zinc-800">
+            <Search size={18} color="#71717a" />
+            <TextInput 
+              placeholder={searchPlaceholder} 
+              placeholderTextColor="#71717a"
+              value={query}
+              onChangeText={setQuery}
+              className="flex-1 ml-3 text-white font-medium"
+            />
+          </View>
+        </View>
+
+        {/* Listagem */}
+        <FlatList
+          data={filteredData}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => renderItem(item)}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+          ListEmptyComponent={
+            <View className="items-center justify-center py-20 opacity-50">
+              <Users size={40} color="#52525b" />
+              <Text className="text-zinc-500 mt-4 font-bold">{emptyMessage}</Text>
+            </View>
+          }
+        />
+      </View>
+    </Modal>
+  );
+});
+
+/**
+ * PremiumCreditCard: Design estilo "Infinite Black".
+ */
+const PremiumCreditCard = React.memo(({ credits, onPress }: { credits: number, onPress: () => void }) => (
+  <TouchableOpacity activeOpacity={0.95} onPress={onPress} className="px-6 mb-10">
+    <LinearGradient
+      colors={['#18181b', '#09090b', '#000000']}
+      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+      className="w-full h-52 rounded-[32px] p-6 justify-between border border-zinc-800 relative overflow-hidden shadow-2xl"
+    >
+      {/* Efeitos de textura */}
+      <View className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full -mr-20 -mt-20 blur-3xl" />
+      <View className="absolute bottom-0 left-0 w-40 h-40 bg-amber-500/5 rounded-full -ml-10 -mb-10 blur-2xl" />
+
+      {/* Topo */}
+      <View className="flex-row justify-between items-start">
+        <View>
+            <Text className="text-zinc-400 font-bold text-[10px] tracking-[4px] uppercase mb-1">Readeek</Text>
+            <Text className="text-white font-black text-lg italic tracking-tighter">INFINITE</Text>
+        </View>
+        <Wifi size={24} color="#52525b" style={{ transform: [{ rotate: '90deg' }] }} />
+      </View>
+
+      {/* Chip */}
+      <View className="flex-row items-center">
+        <View className="w-12 h-9 rounded-lg bg-amber-200/20 border border-amber-300/30 mr-4 overflow-hidden relative justify-center items-center">
+             <View className="w-full h-[1px] bg-black/20 absolute" />
+             <View className="h-full w-[1px] bg-black/20 absolute" />
+             <View className="w-6 h-4 rounded-sm border border-black/20" />
+        </View>
+        <Wifi size={16} color="transparent" /> 
+      </View>
+
+      {/* Rodapé */}
+      <View className="flex-row justify-between items-end">
+        <View>
+             <Text className="text-zinc-500 text-[9px] font-bold uppercase mb-1 ml-1">Saldo Atual</Text>
+             <Text className="text-white font-mono text-3xl font-black tracking-widest text-shadow">
+                {credits.toLocaleString('pt-BR')} <Text className="text-emerald-500 text-sm">CR</Text>
+             </Text>
+        </View>
+        
+        <View className="items-end">
+             <View className="flex-row">
+                <View className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md -mr-3 border border-white/10" />
+                <View className="w-8 h-8 rounded-full bg-emerald-500/80 backdrop-blur-md border border-white/10" />
+             </View>
+        </View>
+      </View>
+    </LinearGradient>
+  </TouchableOpacity>
+));
+
+/**
+ * ProfileHeader: Topo do perfil.
+ */
+const ProfileHeader = React.memo(({ user, onEditPress }: { user: any, onEditPress: () => void }) => (
+  <View className="h-[280px] relative mb-6">
+    <LinearGradient colors={['#064e3b', '#022c22', '#000000']} className="absolute inset-0 h-64" />
+    
+    <View className="px-6 flex-row justify-between items-center mt-14 z-10">
+      <Text className="text-white font-black text-3xl tracking-tighter">Perfil</Text>
+      <TouchableOpacity 
+        onPress={onEditPress} 
+        className="bg-zinc-800/80 p-3 rounded-full border border-zinc-700 backdrop-blur-md"
+      >
+        <Settings size={22} color="#e4e4e7" />
+      </TouchableOpacity>
+    </View>
+
+    <View className="absolute -bottom-2 left-0 right-0 px-6 items-center z-20">
+        <View className="relative shadow-2xl shadow-emerald-900/50">
+          <Image 
+            source={{ uri: user?.image || `https://ui-avatars.com/api/?name=${user?.name}` }} 
+            className="w-32 h-32 rounded-[40px] border-4 border-black bg-zinc-900"
+          />
+          <TouchableOpacity 
+            onPress={onEditPress}
+            className="absolute bottom-0 right-0 bg-emerald-500 p-2 rounded-2xl border-4 border-black"
+          >
+            <Edit3 size={14} color="black" strokeWidth={3} />
+          </TouchableOpacity>
+        </View>
+        <Text className="text-white text-2xl font-black mt-4 tracking-tight">{user?.name}</Text>
+        <Text className="text-zinc-500 font-bold text-sm">@{user?.email?.split('@')[0]}</Text>
+    </View>
+  </View>
+));
+
+/**
+ * StatCard: Botão interativo para abrir modais.
+ */
+const StatCard = React.memo(({ label, value, icon: Icon, onPress }: any) => (
+  <TouchableOpacity 
+    onPress={onPress}
+    activeOpacity={0.7}
+    className="items-center justify-center bg-zinc-900 border border-zinc-800 rounded-3xl p-4 flex-1 mx-1.5 min-h-[100px]"
+  >
+    <Icon size={18} color="#10b981" className="mb-2 opacity-80" />
+    <Text className="text-white font-black text-2xl tracking-tighter">{value}</Text>
+    <Text className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-1">{label}</Text>
+  </TouchableOpacity>
+));
+
+/**
+ * SecuritySection: Configurações de privacidade e senha.
+ */
+const SecuritySection = React.memo(({ 
+  isPublic, 
+  onToggleVisibility, 
+  onChangePassword, 
+  onSignOut 
+}: any) => (
+  <View className="mt-4">
+     <View className="bg-zinc-900 rounded-[32px] border border-zinc-800 overflow-hidden">
+       <TouchableOpacity 
+          onPress={onChangePassword} 
+          className="flex-row items-center p-5 border-b border-zinc-800 active:bg-zinc-800/50"
+       >
+         <View className="w-10 h-10 rounded-2xl bg-zinc-950 items-center justify-center mr-4 border border-zinc-800">
+           <KeyRound size={18} color="#a1a1aa" />
+         </View>
+         <Text className="text-zinc-200 font-bold text-base flex-1">Alterar Senha</Text>
+         <ChevronRight size={20} color="#3f3f46" />
+       </TouchableOpacity>
+
+       <View className="flex-row items-center p-5">
+         <View className="w-10 h-10 rounded-2xl bg-zinc-950 items-center justify-center mr-4 border border-zinc-800">
+           <Shield size={18} color={isPublic ? "#10b981" : "#a1a1aa"} />
+         </View>
+         <View className="flex-1 mr-4">
+           <Text className="text-zinc-200 font-bold text-base">Visibilidade do Perfil</Text>
+           <Text className="text-zinc-500 text-xs mt-0.5">
+             Atualmente: <Text className={isPublic ? "text-emerald-500" : "text-zinc-400"}>
+               {isPublic ? 'Público' : 'Privado'}
+             </Text>
+           </Text>
+         </View>
+         <Switch 
+           value={isPublic} 
+           onValueChange={onToggleVisibility} 
+           trackColor={{ false: '#18181b', true: '#059669' }}
+           thumbColor={'#ffffff'}
+         />
+       </View>
+     </View>
+
+     <TouchableOpacity 
+       onPress={onSignOut}
+       className="mt-8 flex-row items-center justify-center p-5 bg-red-500/10 rounded-[28px] border border-red-500/20 active:bg-red-500/20"
+     >
+       <LogOut size={20} color="#ef4444" />
+       <Text className="text-red-500 font-black ml-3 uppercase tracking-widest text-xs">Encerrar Sessão</Text>
+     </TouchableOpacity>
+
+     <Text className="text-center text-zinc-800 text-[10px] mt-12 font-black uppercase tracking-[6px]">Readeek App</Text>
+  </View>
+));
+
+// --- 2. ITEMS DE LISTA (RENDERERS) ---
+
+const UserItem = ({ user, onFollow }: any) => (
+  <View className="flex-row items-center bg-zinc-900/50 p-4 mb-3 rounded-2xl border border-zinc-800/50">
+    <Image 
+      source={{ uri: user.image || `https://ui-avatars.com/api/?name=${user.name}` }} 
+      className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700" 
+    />
+    <View className="flex-1 ml-4">
+      <Text className="text-white font-bold text-base">{user.name}</Text>
+      <Text className="text-zinc-500 text-xs">@{user.name?.toLowerCase().replace(/\s/g, '')}</Text>
+    </View>
+    <TouchableOpacity onPress={() => onFollow(user.id)} className="bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+      <Text className="text-emerald-500 font-bold text-xs uppercase">Ver</Text>
+    </TouchableOpacity>
   </View>
 );
+
+const PostItem = ({ post }: any) => (
+  <View className="bg-zinc-900/50 p-5 mb-4 rounded-[24px] border border-zinc-800">
+    <View className="flex-row mb-2">
+      <Text className="text-emerald-500 text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md overflow-hidden">
+        {post.type || 'POST'}
+      </Text>
+      <Text className="text-zinc-500 text-[10px] ml-auto">{new Date(post.createdAt).toLocaleDateString()}</Text>
+    </View>
+    <Text className="text-zinc-200 text-sm leading-6 font-medium">{post.content}</Text>
+    <View className="flex-row mt-4 border-t border-white/5 pt-3">
+       <View className="flex-row items-center mr-4">
+          <Users size={14} color="#52525b" />
+          <Text className="text-zinc-500 text-xs ml-1.5 font-bold">{post._count?.comments || 0}</Text>
+       </View>
+       <View className="flex-row items-center">
+          <MessageSquare size={14} color="#52525b" />
+          <Text className="text-zinc-500 text-xs ml-1.5 font-bold">{post._count?.reactions || 0}</Text>
+       </View>
+    </View>
+  </View>
+);
+
+
+// --- 3. TELA PRINCIPAL (ORQUESTRADOR) ---
 
 export default function ProfileScreen() {
   const { user, signOut, updateUser, token } = useAuthStore();
   const router = useRouter();
   
+  // --- STATE ---
   const [loading, setLoading] = useState(true);
+  
+  // Dados
   const [stats, setStats] = useState<any>(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [userBooks, setUserBooks] = useState([]);
-  const [userPosts, setUserPosts] = useState([]);
-  const [activeTab, setActiveTab] = useState<'content' | 'settings'>('content');
+  const [userBooks, setUserBooks] = useState<any[]>([]);
+  const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  
+  // Listas Reais
+  const [followersList, setFollowersList] = useState<any[]>([]); 
+  const [followingList, setFollowingList] = useState<any[]>([]);
 
-  // Forms e Modais
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [name, setName] = useState(user?.name || '');
-  const [about, setAbout] = useState(user?.about || '');
+  // UI Control
+  const [activeTab, setActiveTab] = useState<TabOption>('activity');
+  const [activeModal, setActiveModal] = useState<ModalType>('none');
+  
+  // Forms
+  const [modalEdit, setModalEdit] = useState(false);
+  const [modalPassword, setModalPassword] = useState(false);
   const [isPublic, setIsPublic] = useState(user?.profileVisibility === 'PUBLIC');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [formName, setFormName] = useState(user?.name || '');
+  const [formAbout, setFormAbout] = useState(user?.about || '');
+  const [formImage, setFormImage] = useState<string | null>(null);
   const [passwords, setPasswords] = useState({ current: '', next: '' });
 
+  // Sync Effect
   useEffect(() => {
-    if (!token) return;
-    loadData();
-  }, [token]);
+    if (user) {
+      setFormName(user.name || '');
+      setFormAbout(user.about || '');
+      setIsPublic(user.profileVisibility === 'PUBLIC');
+    }
+  }, [user]);
 
-  const loadData = async () => {
+  // Fetch Data (COM CHAMADAS REAIS DE API)
+  const fetchData = useCallback(async () => {
+    if (!token || !user?.id) return;
     try {
-      setLoading(true);
-      const [statsRes, booksRes, feedRes] = await Promise.all([
+      // Executa chamadas em paralelo para performance
+      const [statsRes, booksRes, followersRes, followingRes, postsRes] = await Promise.all([
         getProfileStats(),
         api.get('/mobile/books'),
-        api.get('/mobile/social/feed')
+        api.get(`/mobile/users/${user.id}/followers`), // API criada: Busca quem me segue
+        api.get(`/mobile/users/${user.id}/following`), // API criada: Busca quem eu sigo
+        api.get(`/mobile/social/posts?userId=${user.id}`) // API atualizada: Meus posts filtrados
       ]);
 
-      if (statsRes) {
-        setStats(statsRes.stats);
-        setSuggestions(statsRes.suggestions || []);
-      }
+      if (statsRes?.stats) setStats(statsRes.stats);
+      if (statsRes?.suggestions) setSuggestions(statsRes.suggestions);
 
-      // FILTRO: Apenas livros adicionados por mim
-      const myOwnedBooks = (booksRes.data || []).filter((b: any) => b.userId === user?.id);
-      setUserBooks(myOwnedBooks);
-      
-      // FILTRO: Meus posts
-      const myPosts = (feedRes.data || []).filter((p: any) => p.userId === user?.id);
-      setUserPosts(myPosts);
+      // Livros (Mantendo filtro local pois endpoint retorna tudo)
+      const myBooks = (booksRes.data || []).filter((b: any) => b.userId === user?.id);
+      setUserBooks(myBooks);
+
+      // Populando listas com dados reais
+      setFollowersList(followersRes.data || []);
+      setFollowingList(followingRes.data || []);
+      setUserPosts(postsRes.data || []); // Já filtrado pelo backend
 
     } catch (e: any) {
-      if (e.response?.status === 401) {
-        signOut();
-      }
+      console.error("Erro ao carregar perfil:", e);
+      if (e.response?.status === 401) signOut();
     } finally {
       setLoading(false);
+    }
+  }, [token, user?.id, signOut]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Handlers
+  const handleTogglePrivacy = useCallback(async (value: boolean) => {
+    const previous = isPublic;
+    setIsPublic(value);
+    try {
+      const visibility = value ? 'PUBLIC' : 'PRIVATE';
+      const updated = await profileService.update({ profileVisibility: visibility });
+      updateUser(updated);
+    } catch (error) {
+      setIsPublic(previous);
+      Alert.alert("Erro", "Falha de conexão.");
+    }
+  }, [isPublic, updateUser]);
+
+  const handleSaveProfile = async () => {
+    try {
+      const updated = await profileService.update({
+        name: formName, about: formAbout,
+        profileVisibility: isPublic ? 'PUBLIC' : 'PRIVATE',
+        image: formImage || undefined
+      });
+      updateUser(updated);
+      setModalEdit(false);
+      fetchData();
+      Alert.alert("Sucesso", "Perfil atualizado!");
+    } catch (e) {
+      Alert.alert("Erro", "Erro ao salvar.");
+    }
+  };
+
+  const handleChangePassword = async () => {
+    try {
+      await profileService.changePassword(passwords.current, passwords.next);
+      Alert.alert("Sucesso", "Senha alterada.");
+      setModalPassword(false);
+      setPasswords({ current: '', next: '' });
+    } catch (e) {
+      Alert.alert("Erro", "Verifique sua senha atual.");
     }
   };
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.6,
     });
-    if (!result.canceled) setSelectedImage(result.assets[0].uri);
-  };
-
-  const handleUpdateProfile = async () => {
-    try {
-      setLoading(true);
-      const updatedUser = await profileService.update({
-        name, about,
-        profileVisibility: isPublic ? 'PUBLIC' : 'PRIVATE',
-        image: selectedImage || undefined
-      });
-      updateUser(updatedUser);
-      Alert.alert("Sucesso", "Perfil atualizado!");
-      setShowEditProfile(false);
-      loadData();
-    } catch (error) {
-      Alert.alert("Erro", "Falha ao salvar.");
-    } finally { setLoading(false); }
+    if (!result.canceled) setFormImage(result.assets[0].uri);
   };
 
   if (loading && !stats) return (
@@ -123,184 +432,172 @@ export default function ProfileScreen() {
       
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         
-        {/* HEADER SECTION */}
-        <View className="h-[280px] relative">
-          <LinearGradient colors={['#064e3b', '#022c22', '#000000']} className="absolute inset-0 h-56" />
-          
-          <View className="px-6 flex-row justify-between items-center mt-12">
-            <Text className="text-white font-black text-2xl tracking-tighter">Perfil</Text>
-            <TouchableOpacity onPress={() => setShowEditProfile(true)} className="bg-white/10 p-2.5 rounded-full border border-white/10">
-              <Settings size={20} color="white" />
-            </TouchableOpacity>
-          </View>
+        {/* HEADER */}
+        <ProfileHeader user={user} onEditPress={() => setModalEdit(true)} />
 
-          <View className="absolute bottom-0 left-0 right-0 px-6 items-center">
-              <View className="relative shadow-2xl shadow-emerald-500/40">
-                <Image 
-                  source={{ uri: user?.image || `https://ui-avatars.com/api/?name=${user?.name}` }} 
-                  className="w-28 h-28 rounded-[35px] border-4 border-black bg-zinc-900"
-                />
-                <View className="absolute -bottom-1 -right-1 bg-emerald-500 w-6 h-6 rounded-full border-2 border-black" />
-              </View>
-              <Text className="text-white text-2xl font-black mt-3 tracking-tight">{user?.name}</Text>
-              <Text className="text-zinc-500 font-bold">@{user?.email?.split('@')[0]}</Text>
-          </View>
+        {/* STATS GRID (Botões Interativos) */}
+        <View className="flex-row justify-between px-4 mt-2 mb-8">
+          <StatCard 
+            label="Seguidores" 
+            value={stats?._count?.followers || 0} 
+            icon={Users} 
+            onPress={() => setActiveModal('followers')}
+          />
+          <StatCard 
+            label="Seguindo" 
+            value={stats?._count?.following || 0} 
+            icon={Users} 
+            onPress={() => setActiveModal('following')}
+          />
+          <StatCard 
+            label="Posts" 
+            value={userPosts.length} 
+            icon={MessageSquare} 
+            onPress={() => setActiveModal('posts')}
+          />
         </View>
 
-        {/* CARD DE CRÉDITOS GOLD */}
-        <View className="px-6 mt-8">
-            <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/shop')}>
-                <LinearGradient
-                    colors={['#1e1b12', '#0c0a09']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={{ borderRadius: 32, borderWidth: 1, borderColor: 'rgba(251, 191, 36, 0.2)' }}
-                    className="flex-row items-center p-6 shadow-2xl"
+        {/* CREDIT CARD "INFINITE" */}
+        <PremiumCreditCard 
+            credits={stats?.credits || 0} 
+            onPress={() => router.push('/shop')} 
+        />
+
+        {/* TABS CONTROL */}
+        <View className="px-6 mb-6">
+            <View className="flex-row bg-zinc-900 p-1.5 rounded-2xl border border-zinc-800">
+                <TouchableOpacity 
+                    onPress={() => setActiveTab('activity')} 
+                    className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'activity' ? 'bg-zinc-800' : ''}`}
                 >
-                    <View style={{ borderRadius: 20 }} className="w-14 h-14 bg-amber-500/10 items-center justify-center mr-5 border border-amber-500/20">
-                        <CreditCard size={28} color="#fbbf24" />
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-amber-500/60 text-[10px] font-black uppercase tracking-[3px] mb-1">Saldo Readeek</Text>
-                        <View className="flex-row items-end">
-                            <Text className="text-white font-black text-3xl tracking-tighter">{stats?.credits || 0}</Text>
-                            <Text className="text-zinc-500 font-bold text-xs ml-2 mb-1.5">Créditos</Text>
-                        </View>
-                    </View>
-                    <View className="bg-amber-500 w-10 h-10 rounded-full items-center justify-center shadow-lg shadow-amber-500/40">
-                        <Plus size={20} color="black" strokeWidth={3} />
-                    </View>
-                </LinearGradient>
-            </TouchableOpacity>
+                    <LayoutGrid size={16} color={activeTab === 'activity' ? 'white' : '#71717a'} />
+                    <Text className={`ml-2 font-bold text-xs ${activeTab === 'activity' ? 'text-white' : 'text-zinc-500'}`}>Atividade</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                    onPress={() => setActiveTab('security')} 
+                    className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'security' ? 'bg-zinc-800' : ''}`}
+                >
+                    <Shield size={16} color={activeTab === 'security' ? 'white' : '#71717a'} />
+                    <Text className={`ml-2 font-bold text-xs ${activeTab === 'security' ? 'text-white' : 'text-zinc-500'}`}>Segurança</Text>
+                </TouchableOpacity>
+            </View>
         </View>
 
-        {/* MÉTRICAS */}
-        <View className="flex-row justify-between px-5 mt-6">
-          <StatCard label="Seguidores" value={stats?._count?.followers || 0} icon={Users} />
-          <StatCard label="Seguindo" value={stats?._count?.following || 0} icon={Users} />
-          <StatCard label="Posts" value={userPosts.length} icon={MessageSquare} />
-        </View>
-
-        {/* TABS SELECTOR */}
-        <View className="mt-10 px-6">
-          <View className="flex-row bg-zinc-900/80 p-1.5 rounded-2xl border border-zinc-800 mb-8">
-            <TouchableOpacity onPress={() => setActiveTab('content')} className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'content' ? 'bg-zinc-800 shadow-sm' : ''}`}>
-              <LayoutGrid size={18} color={activeTab === 'content' ? 'white' : '#71717a'} />
-              <Text className={`font-bold ml-2 ${activeTab === 'content' ? 'text-white' : 'text-zinc-500'}`}>Atividade</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab('settings')} className={`flex-1 flex-row items-center justify-center py-3 rounded-xl ${activeTab === 'settings' ? 'bg-zinc-800 shadow-sm' : ''}`}>
-              <Shield size={18} color={activeTab === 'settings' ? 'white' : '#71717a'} />
-              <Text className={`font-bold ml-2 ${activeTab === 'settings' ? 'text-white' : 'text-zinc-500'}`}>Segurança</Text>
-            </TouchableOpacity>
-          </View>
-
-          {activeTab === 'content' ? (
-            <View>
-               {/* ESTANTE */}
-               <View className="mb-10">
-                    <Text className="text-white font-black text-xl mb-5 ml-1 tracking-tight">Minha Estante</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {userBooks.length > 0 ? userBooks.map((book: any) => (
-                            <TouchableOpacity key={book.id} className="mr-5 w-28" onPress={() => router.push(`/read/${book.id}` as any)}>
-                                <View className="w-28 h-40 bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-lg">
-                                    <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />
+        {/* TAB CONTENT */}
+        <View className="px-6">
+            {activeTab === 'activity' ? (
+                <>
+                    {/* ESTANTE */}
+                    <View className="mb-8">
+                        <Text className="text-white font-black text-lg mb-4 ml-1">Minha Estante</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            {userBooks.length > 0 ? userBooks.map((book: any) => (
+                                <TouchableOpacity key={book.id} className="mr-4 w-24" onPress={() => router.push(`/read/${book.id}` as any)}>
+                                    <Image source={{ uri: book.coverUrl }} className="w-24 h-36 rounded-xl bg-zinc-800 border border-zinc-700" resizeMode="cover" />
+                                    <Text className="text-zinc-400 text-[10px] mt-2 font-bold text-center" numberOfLines={1}>{book.title}</Text>
+                                </TouchableOpacity>
+                            )) : (
+                                <View className="w-full bg-zinc-900/50 p-6 rounded-2xl border border-dashed border-zinc-800 items-center">
+                                    <Book size={24} color="#52525b" />
+                                    <Text className="text-zinc-500 text-xs font-bold mt-2">Nenhum livro iniciado</Text>
                                 </View>
-                                <Text className="text-zinc-200 text-[11px] mt-2 font-black px-1" numberOfLines={1}>{book.title}</Text>
-                            </TouchableOpacity>
-                        )) : (
-                            <View className="bg-zinc-900/40 p-10 rounded-[35px] border border-zinc-800 border-dashed items-center w-[280px]">
-                                <Book size={32} color="#3f3f46" />
-                                <Text className="text-zinc-500 text-sm mt-3 font-bold text-center">Nenhum livro próprio.</Text>
-                            </View>
-                        )}
-                    </ScrollView>
-               </View>
-
-               {/* RECENT POSTS */}
-               <View className="mb-10">
-                    <Text className="text-white font-black text-xl mb-5 ml-1 tracking-tight">Posts Recentes</Text>
-                    {userPosts.slice(0, 3).map((post: any) => (
-                        <View key={post.id} className="bg-zinc-900/50 p-6 rounded-[32px] border border-zinc-800 mb-4">
-                            <Text className="text-zinc-300 text-sm leading-6">{post.content}</Text>
-                        </View>
-                    ))}
-               </View>
-
-               {/* SUGESTÕES DE SEGUIDORES */}
-               <Text className="text-zinc-500 font-black text-[10px] uppercase tracking-[4px] mb-5 ml-1 mt-4">Quem seguir</Text>
-               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                 {suggestions.map((item: any) => (
-                   <View key={item.id} className="bg-zinc-900/30 border border-zinc-800 rounded-[35px] p-6 mr-4 items-center w-40">
-                     <Image source={{ uri: item.image || `https://ui-avatars.com/api/?name=${item.name}` }} className="w-16 h-16 rounded-[24px] bg-zinc-800" />
-                     <Text className="text-white font-bold text-xs mt-4 text-center" numberOfLines={1}>{item.name}</Text>
-                     <TouchableOpacity 
-                        onPress={() => toggleFollowUser(item.id).then(() => loadData())}
-                        className="mt-4 bg-emerald-500 py-2.5 px-6 rounded-full"
-                     >
-                       <Text className="text-black font-black text-[10px] uppercase">Seguir</Text>
-                     </TouchableOpacity>
-                   </View>
-                 ))}
-               </ScrollView>
-            </View>
-          ) : (
-            <View>
-               <View className="bg-zinc-900 rounded-[35px] border border-zinc-800 overflow-hidden shadow-2xl">
-                 <TouchableOpacity onPress={() => setShowChangePassword(true)} className="flex-row items-center p-6 border-b border-zinc-800">
-                   <View className="w-10 h-10 rounded-2xl bg-zinc-800 items-center justify-center mr-4 border border-zinc-700"><KeyRound size={18} color="#a1a1aa" /></View>
-                   <Text className="text-zinc-200 font-bold">Alterar Senha</Text>
-                   <View className="flex-1" /><ChevronRight size={18} color="#3f3f46" />
-                 </TouchableOpacity>
-
-                 <View className="flex-row items-center p-6">
-                   <View className="w-10 h-10 rounded-2xl bg-zinc-800 items-center justify-center mr-4 border border-zinc-700"><Shield size={18} color="#a1a1aa" /></View>
-                   <View className="flex-1">
-                     <Text className="text-zinc-200 font-bold">Visibilidade</Text>
-                     <Text className="text-zinc-600 text-[10px] font-black uppercase">Perfil {isPublic ? 'Público' : 'Privado'}</Text>
+                            )}
+                        </ScrollView>
                     </View>
-                   <Switch value={isPublic} onValueChange={(v) => { setIsPublic(v); handleUpdateProfile(); }} trackColor={{ false: '#27272a', true: '#10b981' }} />
-                 </View>
-               </View>
 
-               <TouchableOpacity onPress={() => Alert.alert("Sair", "Deseja encerrar sessão?", [{text: "Não"}, {text: "Sair", style: 'destructive', onPress: signOut}])}
-                className="mt-10 flex-row items-center justify-center p-6 bg-red-500/5 rounded-[35px] border border-red-500/10">
-                 <LogOut size={20} color="#ef4444" />
-                 <Text className="text-red-500 font-black ml-3 uppercase tracking-widest text-xs">Encerrar Sessão</Text>
-               </TouchableOpacity>
-            </View>
-          )}
+                    {/* SUGESTÕES (MANTIDO) */}
+                    <View>
+                        <Text className="text-zinc-500 font-black text-[10px] uppercase tracking-widest mb-4 ml-1">Sugestões para você</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            {suggestions.map((item: any) => (
+                                <View key={item.id} className="bg-zinc-900 border border-zinc-800 rounded-[24px] p-4 mr-3 items-center w-32">
+                                    <Image source={{ uri: item.image || `https://ui-avatars.com/api/?name=${item.name}` }} className="w-12 h-12 rounded-full bg-zinc-800" />
+                                    <Text className="text-white font-bold text-[10px] mt-2 text-center" numberOfLines={1}>{item.name}</Text>
+                                    <TouchableOpacity 
+                                        onPress={() => toggleFollowUser(item.id).then(() => fetchData())}
+                                        className="mt-3 bg-emerald-600 w-full py-2 rounded-full items-center"
+                                    >
+                                        <Text className="text-white font-black text-[8px] uppercase">Seguir</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </>
+            ) : (
+                <SecuritySection 
+                    isPublic={isPublic}
+                    onToggleVisibility={handleTogglePrivacy}
+                    onChangePassword={() => setModalPassword(true)}
+                    onSignOut={() => Alert.alert("Sair", "Tem certeza?", [{text: "Não"}, {text: "Sair", style: 'destructive', onPress: signOut}])}
+                />
+            )}
         </View>
-        
-        <Text className="text-center text-zinc-800 text-[10px] mt-20 font-black uppercase tracking-[6px]">READEEK v1.2</Text>
       </ScrollView>
 
-      {/* MODAL EDITAR PERFIL */}
-      <Modal visible={showEditProfile} animationType="slide" presentationStyle="pageSheet">
+      {/* --- MODAIS DE LISTAGEM --- */}
+      
+      {/* 1. Modal de Seguidores */}
+      <ListModal 
+        visible={activeModal === 'followers'} 
+        title="Seguidores" 
+        onClose={() => setActiveModal('none')}
+        data={followersList}
+        emptyMessage="Você ainda não tem seguidores."
+        renderItem={(item) => <UserItem user={item} onFollow={(id: string) => router.push(`/users/${id}` as any)} />}
+      />
+
+      {/* 2. Modal de Seguindo */}
+      <ListModal 
+        visible={activeModal === 'following'} 
+        title="Seguindo" 
+        onClose={() => setActiveModal('none')}
+        data={followingList}
+        emptyMessage="Você não segue ninguém."
+        renderItem={(item) => <UserItem user={item} onFollow={(id: string) => router.push(`/users/${id}` as any)} />}
+      />
+
+      {/* 3. Modal de Posts */}
+      <ListModal 
+        visible={activeModal === 'posts'} 
+        title="Meus Posts" 
+        onClose={() => setActiveModal('none')}
+        data={userPosts}
+        searchPlaceholder="Buscar nos seus posts..."
+        emptyMessage="Nenhum post publicado."
+        renderItem={(item) => <PostItem post={item} />}
+      />
+
+      {/* --- MODAIS DE FORMULÁRIO --- */}
+      
+      <Modal visible={modalEdit} animationType="slide" presentationStyle="pageSheet">
         <View className="flex-1 bg-black">
           <View className="flex-row justify-between items-center p-6 border-b border-zinc-900">
-            <Text className="text-white text-xl font-black tracking-tighter">Editar Perfil</Text>
-            <TouchableOpacity onPress={() => setShowEditProfile(false)}><X size={24} color="white" /></TouchableOpacity>
+            <Text className="text-white text-lg font-black">Editar Perfil</Text>
+            <TouchableOpacity onPress={() => setModalEdit(false)} className="bg-zinc-900 p-2 rounded-full"><X size={20} color="white" /></TouchableOpacity>
           </View>
-          <ScrollView className="px-6 pt-10">
-            <TouchableOpacity onPress={handlePickImage} className="items-center mb-12">
-                <Image source={{ uri: selectedImage || user?.image || `https://ui-avatars.com/api/?name=${user?.name}` }} className="w-32 h-32 rounded-[45px] bg-zinc-900 border border-zinc-800" />
-                <View className="absolute bottom-0 right-1/3 bg-emerald-500 p-2.5 rounded-2xl border-4 border-black"><Camera size={20} color="white" /></View>
+          <ScrollView className="p-6">
+            <TouchableOpacity onPress={handlePickImage} className="items-center mb-10 self-center">
+                <Image source={{ uri: formImage || user?.image || `https://ui-avatars.com/api/?name=${user?.name}` }} className="w-32 h-32 rounded-full bg-zinc-900 border border-zinc-800" />
+                <View className="absolute bottom-0 right-0 bg-emerald-500 p-2.5 rounded-full border-4 border-black"><Camera size={18} color="white" /></View>
             </TouchableOpacity>
-            <TextInput value={name} onChangeText={setName} placeholder="Nome" placeholderTextColor="#3f3f46" className="bg-zinc-900 text-white p-5 rounded-[25px] border border-zinc-800 mb-6 font-bold" />
-            <TextInput value={about} onChangeText={setAbout} multiline placeholder="Bio" placeholderTextColor="#3f3f46" className="bg-zinc-900 text-white p-5 rounded-[25px] border border-zinc-800 min-h-[140px]" />
-            <TouchableOpacity onPress={handleUpdateProfile} className="bg-white p-5 rounded-[30px] mt-12 flex-row justify-center items-center active:opacity-90"><Text className="text-black font-black uppercase">Salvar Perfil</Text></TouchableOpacity>
+            <Text className="text-zinc-500 text-xs font-bold uppercase mb-2 ml-2">Nome</Text>
+            <TextInput value={formName} onChangeText={setFormName} className="bg-zinc-900 text-white p-4 rounded-2xl border border-zinc-800 mb-6 font-bold" />
+            <Text className="text-zinc-500 text-xs font-bold uppercase mb-2 ml-2">Bio</Text>
+            <TextInput value={formAbout} onChangeText={setFormAbout} multiline className="bg-zinc-900 text-white p-4 rounded-2xl border border-zinc-800 min-h-[120px] mb-8" textAlignVertical="top"/>
+            <TouchableOpacity onPress={handleSaveProfile} className="bg-white p-4 rounded-full items-center active:opacity-90"><Text className="text-black font-black uppercase">Salvar Alterações</Text></TouchableOpacity>
           </ScrollView>
         </View>
       </Modal>
 
-      {/* MODAL SENHA */}
-      <Modal visible={showChangePassword} animationType="fade" transparent>
-        <View className="flex-1 bg-black/95 justify-center px-6">
-          <View className="bg-zinc-900 p-8 rounded-[45px] border border-zinc-800 shadow-2xl">
-            <Text className="text-white text-2xl font-black mb-6 text-center tracking-tighter">Segurança</Text>
-            <TextInput placeholder="Senha Atual" secureTextEntry value={passwords.current} onChangeText={(t) => setPasswords(p => ({...p, current: t}))} placeholderTextColor="#3f3f46" className="bg-black text-white p-5 rounded-[25px] border border-zinc-800 mb-4" />
-            <TextInput placeholder="Nova Senha" secureTextEntry value={passwords.next} onChangeText={(t) => setPasswords(p => ({...p, next: t}))} placeholderTextColor="#3f3f46" className="bg-black text-white p-5 rounded-[25px] border border-zinc-800 mb-6" />
-            <TouchableOpacity onPress={async () => { try { await profileService.changePassword(passwords.current, passwords.next); Alert.alert("Sucesso", "Senha alterada!"); setShowChangePassword(false); } catch(e) { Alert.alert("Erro", "Senha incorreta."); } }} className="bg-white p-5 rounded-[25px] items-center"><Text className="text-black font-black uppercase">Confirmar</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowChangePassword(false)} className="mt-4 items-center"><Text className="text-zinc-500 font-bold">Cancelar</Text></TouchableOpacity>
+      <Modal visible={modalPassword} animationType="fade" transparent>
+        <View className="flex-1 bg-black/80 justify-center px-6">
+          <View className="bg-zinc-950 p-8 rounded-[32px] border border-zinc-800">
+            <Text className="text-white text-xl font-black mb-6 text-center">Nova Senha</Text>
+            <TextInput placeholder="Senha Atual" secureTextEntry value={passwords.current} onChangeText={(t) => setPasswords(p => ({...p, current: t}))} placeholderTextColor="#52525b" className="bg-black text-white p-4 rounded-xl border border-zinc-800 mb-3" />
+            <TextInput placeholder="Nova Senha" secureTextEntry value={passwords.next} onChangeText={(t) => setPasswords(p => ({...p, next: t}))} placeholderTextColor="#52525b" className="bg-black text-white p-4 rounded-xl border border-zinc-800 mb-6" />
+            <TouchableOpacity onPress={handleChangePassword} className="bg-emerald-500 p-4 rounded-xl items-center mb-3"><Text className="text-black font-bold uppercase text-xs">Confirmar</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalPassword(false)} className="p-2 items-center"><Text className="text-zinc-500 font-bold text-xs">Cancelar</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
