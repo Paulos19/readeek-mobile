@@ -19,8 +19,6 @@ import { Book, UserRole } from './_types/book';
 import { HeroBanner } from './_components/HeroBanner';
 import { GreetingHeader } from './_components/GreetingHeader';
 import { BookDetailsModal } from './_components/BookDetailsModal';
-// Certifique-se de que o nome do arquivo corresponde ao criado (RankingCard.tsx ou ReaderRankingCard.tsx)
-// Baseado no seu último prompt, assumo que você tem o RankingCard.tsx
 import { RankingCard } from './_components/RankingCard'; 
 
 // --- COMPONENTES AUXILIARES ---
@@ -51,7 +49,7 @@ const BookCardSmall = React.memo(({ book, onPress }: { book: Book, onPress: (boo
              {book.isDownloading && (
                  <View className="absolute inset-0 bg-black/70 items-center justify-center">
                     <ActivityIndicator color="#10b981" />
-                    <Text className="text-white text-[10px] font-bold mt-1">{Math.round(book.downloadProgress)}%</Text>
+                    <Text className="text-white text-[10px] font-bold mt-1">{Math.round(book.downloadProgress || 0)}%</Text>
                  </View>
              )}
 
@@ -99,7 +97,8 @@ export default function Dashboard() {
     }
 
     try {
-      const response = await api.get('/mobile/books');
+      // Adiciona timestamp para evitar cache da API
+      const response = await api.get(`/mobile/books?_t=${Date.now()}`);
       const apiBooks = Array.isArray(response.data) ? response.data : [];
 
       const processedBooks: Book[] = await Promise.all(apiBooks.map(async (book: any) => {
@@ -116,18 +115,31 @@ export default function Dashboard() {
             role: safeRole
         };
 
-        // Sync Reverso (Tenta atualizar progresso local se o cloud for mais novo, ou vice-versa)
+        // --- LÓGICA DE SINCRONIZAÇÃO DE PROGRESSO ---
+        // Recupera dados locais para garantir que o "Em andamento" esteja atualizado
         let localCfi = null;
-        if (book.currentLocation && book.userId === user?.id) {
-              try {
-                  localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
-                  // Se o cloud tiver um CFI e o local não, ou forem diferentes, salva
-                  if (book.currentLocation !== localCfi) {
-                      await AsyncStorage.setItem(`@progress:${book.id}`, book.currentLocation);
-                      localCfi = book.currentLocation;
-                  }
-              } catch (e) { /* silent */ }
+        let localTimestamp = 0;
+
+        if (book.userId === user?.id) {
+             try {
+                 // Recupera CFI
+                 localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
+                 
+                 // Recupera timestamp de última leitura local (importante para ordenação)
+                 const tsStr = await AsyncStorage.getItem(`@last_read:${book.id}`);
+                 localTimestamp = tsStr ? parseInt(tsStr, 10) : 0;
+                 
+                 // Se o local for diferente do cloud, atualiza o objeto localmente para exibição imediata
+                 if (localCfi && localCfi !== book.currentLocation) {
+                     // Aqui assumimos que o local é o mais recente se a API ainda não atualizou
+                     // Você poderia adicionar lógica de timestamp aqui se o backend também retornar timestamp de leitura
+                 }
+             } catch (e) { /* silent */ }
         }
+
+        // Data de atualização: Usa a mais recente entre a API e o Local
+        const apiDate = book.updatedAt ? new Date(book.updatedAt).getTime() : 0;
+        const finalDate = new Date(Math.max(apiDate, localTimestamp));
 
         return {
           ...book,
@@ -138,9 +150,8 @@ export default function Dashboard() {
           isDownloading: false,
           downloadProgress: 0,
           progress: (book.userId === user?.id) ? (book.progress || 0) : 0, 
-          currentLocation: localCfi,
-          // Garante objeto Date para ordenação correta no card de "Continuar Lendo"
-          updatedAt: book.updatedAt ? new Date(book.updatedAt) : new Date(0) 
+          currentLocation: localCfi || book.currentLocation, // Prioriza local se existir, senão API
+          updatedAt: finalDate // Usa data combinada para ordenação correta
         };
       }));
 
@@ -169,6 +180,7 @@ export default function Dashboard() {
   useFocusEffect(
     useCallback(() => {
         if (user) {
+            // Força atualização ao focar
             fetchBooks();
             loadTopRanking();
         }
@@ -181,7 +193,7 @@ export default function Dashboard() {
     setRefreshing(false);
   };
 
-  // Filtros Memoized (Com tipagem corrigida)
+  // Filtros Memoized
   const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo<{
     featuredBooks: Book[];
     rankingBooks: Book[];
@@ -190,15 +202,22 @@ export default function Dashboard() {
   }>(() => {
     if (!user) return { featuredBooks: [], rankingBooks: [], communityBooks: [], myBooks: [] };
 
+    // Meus livros: baixados ou com progresso
     const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
+    
+    // Destaques (Admins)
     const featured = allBooks.filter(b => b.owner?.role === 'ADMIN');
+    
+    // Comunidade (Resto)
     const community = allBooks.filter(b => !b.isDownloaded && b.owner?.role !== 'ADMIN' && b.userId !== user?.id);
+    
+    // Ranking (Mais baixados)
     const ranking = [...allBooks].sort((a, b) => (b.downloadsCount || 0) - (a.downloadsCount || 0)).slice(0, 5);
 
     return { featuredBooks: featured, rankingBooks: ranking, communityBooks: community, myBooks: my };
   }, [allBooks, user]);
 
-  // Lógica de "Último Livro" para o Header
+  // Lógica de "Último Livro" (Header)
   const lastReadBook = useMemo(() => {
     if (!user || allBooks.length === 0) return null;
     
@@ -207,8 +226,8 @@ export default function Dashboard() {
     
     // 2. Ordena pela data de atualização (mais recente primeiro)
     startedBooks.sort((a, b) => {
-        const dateA = a.updatedAt ? a.updatedAt.getTime() : 0;
-        const dateB = b.updatedAt ? b.updatedAt.getTime() : 0;
+        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
         return dateB - dateA; // Decrescente
     });
     
@@ -230,8 +249,11 @@ export default function Dashboard() {
     setModalVisible(true);
   }, []);
 
-  const handleContinueReading = useCallback((book: Book) => {
-     router.push({
+  const handleContinueReading = useCallback(async (book: Book) => {
+      // Atualiza timestamp local para garantir que ele suba no ranking ao voltar
+      await AsyncStorage.setItem(`@last_read:${book.id}`, Date.now().toString());
+
+      router.push({
         pathname: `/read/${book.id}`,
         params: { 
             author: book.author || '',
@@ -374,7 +396,9 @@ export default function Dashboard() {
                     <ScrollView 
                         horizontal 
                         showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{ paddingHorizontal: 24 }}
+                        contentContainerStyle={{ paddingHorizontal: 24 }} // Alinhamento com o Header (px-6 = 24)
+                        snapToAlignment="start"
+                        decelerationRate="fast"
                     >
                         {topUsers.map((user, index) => (
                             <RankingCard key={user.id} user={user} position={index + 1} />
@@ -387,7 +411,13 @@ export default function Dashboard() {
             {myBooks.length > 0 && (
                 <View>
                     <SectionTitle title="Minha Estante" icon={BookOpen} />
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        contentContainerStyle={{ paddingHorizontal: 24 }} // Alinhamento corrigido
+                        snapToAlignment="start"
+                        decelerationRate="fast"
+                    >
                         {myBooks.map((book) => (
                              <TouchableOpacity key={book.id} onPress={() => handleBookPress(book)} className="mr-4 w-28">
                                 <View className="h-40 w-full rounded-xl bg-zinc-800 overflow-hidden mb-2 border border-emerald-500/30 shadow-lg shadow-emerald-900/20 relative">
@@ -413,7 +443,13 @@ export default function Dashboard() {
             {/* 5. Mais Baixados */}
             <View>
                 <SectionTitle title="Mais Baixados" icon={TrendingUp} color="#facc15" />
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    contentContainerStyle={{ paddingHorizontal: 24 }} // Alinhamento corrigido
+                    snapToAlignment="start"
+                    decelerationRate="fast"
+                >
                     {rankingBooks.map((book, index) => (
                         <View key={book.id} className="mr-4 relative">
                             <Text className="absolute -left-2 -bottom-4 text-[80px] font-black text-white/5 z-0 leading-none">
@@ -428,12 +464,18 @@ export default function Dashboard() {
             {/* 6. Comunidade */}
             <View>
                 <SectionTitle title="Comunidade" icon={Users} color="#60a5fa" />
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    contentContainerStyle={{ paddingHorizontal: 24 }} // Alinhamento corrigido
+                    snapToAlignment="start"
+                    decelerationRate="fast"
+                >
                     {communityBooks.map((book) => (
                         <BookCardSmall key={book.id} book={book} onPress={handleBookPress} />
                     ))}
                     {communityBooks.length === 0 && (
-                        <Text className="text-zinc-500 italic ml-6">Tudo atualizado por aqui.</Text>
+                        <Text className="text-zinc-500 italic">Tudo atualizado por aqui.</Text>
                     )}
                 </ScrollView>
             </View>

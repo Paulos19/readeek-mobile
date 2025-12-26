@@ -10,7 +10,7 @@ import {
   RefreshControl, 
   TextInput,
   StatusBar,
-  Dimensions
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -24,16 +24,21 @@ import {
   MoreVertical, 
   Download,
   Book,
-  WifiOff
+  WifiOff,
+  Trash2,
+  X,
+  Smartphone
 } from 'lucide-react-native';
 
-import { useAuthStore } from 'stores/useAuthStore';
-import { api, uploadBook } from 'lib/api';
-import { fileManager } from 'lib/files';
-import { Book as BookType } from './_types/book';
-import { useNetworkStatus } from './_hooks/useNetworkStatus'; // Certifique-se que o hook existe
+import { useAuthStore } from '../../stores/useAuthStore';
+import { api, uploadBook, deleteBook } from '../../lib/api';
+import { fileManager } from '../../lib/files';
+import { Book as BookType } from '../../app/(app)/_types/book';
+import { useNetworkStatus } from './_hooks/useNetworkStatus';
 
 const CARD_HEIGHT = 120;
+
+// --- COMPONENTES AUXILIARES ---
 
 const FilterChip = ({ label, active, onPress }: { label: string, active: boolean, onPress: () => void }) => (
   <TouchableOpacity 
@@ -62,6 +67,81 @@ const EmptyState = ({ isOffline }: { isOffline: boolean }) => (
   </View>
 );
 
+// Modal de Opções do Livro
+const BookOptionsModal = ({ 
+  visible, 
+  book, 
+  onClose, 
+  onDeleteLocal, 
+  onDeleteRemote, 
+  canDeleteRemote 
+}: { 
+  visible: boolean, 
+  book: BookType | null, 
+  onClose: () => void, 
+  onDeleteLocal: () => void,
+  onDeleteRemote: () => void,
+  canDeleteRemote: boolean
+}) => {
+  if (!book) return null;
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity 
+        className="flex-1 bg-black/60 justify-end" 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View className="bg-zinc-900 rounded-t-3xl p-6 border-t border-zinc-800">
+          <View className="flex-row items-center justify-between mb-6 border-b border-zinc-800 pb-4">
+            <View className="flex-1 mr-4">
+                <Text className="text-white font-bold text-lg" numberOfLines={1}>{book.title}</Text>
+                <Text className="text-zinc-500 text-sm">{book.author || 'Autor Desconhecido'}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} className="p-2 bg-zinc-800 rounded-full">
+                <X size={20} color="#a1a1aa" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Opção 1: Remover Download */}
+          {book.isDownloaded && (
+            <TouchableOpacity 
+                onPress={() => { onDeleteLocal(); onClose(); }}
+                className="flex-row items-center p-4 bg-zinc-800 rounded-xl mb-3 active:bg-zinc-700"
+            >
+                <View className="w-10 h-10 rounded-full bg-orange-500/10 items-center justify-center mr-4">
+                    <Smartphone size={20} color="#f97316" />
+                </View>
+                <View>
+                    <Text className="text-zinc-200 font-bold text-base">Remover do Dispositivo</Text>
+                    <Text className="text-zinc-500 text-xs">Libera espaço, mantém na nuvem</Text>
+                </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Opção 2: Excluir da Biblioteca (Apenas Dono/Admin) */}
+          {canDeleteRemote && (
+            <TouchableOpacity 
+                onPress={() => { onDeleteRemote(); onClose(); }}
+                className="flex-row items-center p-4 bg-red-500/10 rounded-xl mb-2 active:bg-red-500/20 border border-red-500/20"
+            >
+                <View className="w-10 h-10 rounded-full bg-red-500/20 items-center justify-center mr-4">
+                    <Trash2 size={20} color="#ef4444" />
+                </View>
+                <View>
+                    <Text className="text-red-400 font-bold text-base">Excluir Permanentemente</Text>
+                    <Text className="text-red-500/60 text-xs">Apaga para todos os usuários</Text>
+                </View>
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+// --- TELA PRINCIPAL ---
+
 export default function Library() {
   const router = useRouter();
   const { user } = useAuthStore();
@@ -75,9 +155,12 @@ export default function Library() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'downloaded' | 'reading'>('all');
 
+  // Estado para o Modal de Opções
+  const [selectedBook, setSelectedBook] = useState<BookType | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
   const fetchLibrary = async () => {
     try {
-      // 1. Busca IDs locais (Agora a função existe no lib/files.ts)
       const localBookIds = await fileManager.getDownloadedBooks();
 
       if (isConnected) {
@@ -90,8 +173,9 @@ export default function Library() {
             isDownloaded: localBookIds.includes(b.id)
         }));
 
+        // Filtra para mostrar apenas livros relevantes para o usuário na biblioteca
         const myLibrary = processedBooks.filter(b => 
-          b.userId === user?.id || b.isDownloaded || (b.progress > 0)
+          b.userId === user?.id || b.isDownloaded || (b.progress && b.progress > 0)
         );
 
         setBooks(myLibrary);
@@ -102,29 +186,22 @@ export default function Library() {
             const coverPath = `${FileSystem.documentDirectory}books/${bookId}/cover.jpg`;
             const coverInfo = await FileSystem.getInfoAsync(coverPath);
             
-            // ✅ CORREÇÃO DE TIPAGEM PARA O MODO OFFLINE
             const offlineBook: BookType = {
-                id: bookId,
-                title: 'Livro Baixado', // Placeholder (sem metadados salvos)
-                author: 'Offline',
-                coverUrl: coverInfo.exists ? coverPath : null,
-                progress: 0,
-                // userId é obrigatório na interface, usamos o do usuário logado ou string vazia
-                userId: user?.id || '', 
-                isDownloaded: true,
-                
-                // Campos obrigatórios que estavam faltando:
-                description: 'Disponível offline',
-                filePath: fileManager.getLocalBookUri(bookId),
-                currentLocation: null,
-                isDownloading: false,
-                downloadProgress: 0,
-                
-                // Campos opcionais
-                downloadsCount: 0,
-                
-                // Correção do erro de tipo: owner deve ser undefined, não null
-                owner: undefined 
+              id: bookId,
+              title: 'Livro Baixado', // Idealmente persistir metadados localmente para ter título real
+              author: 'Offline',
+              coverUrl: coverInfo.exists ? coverPath : null,
+              progress: 0,
+              userId: user?.id || '',
+              isDownloaded: true,
+              description: 'Disponível offline',
+              filePath: fileManager.getLocalBookUri(bookId),
+              currentLocation: null,
+              isDownloading: false,
+              downloadProgress: 0,
+              downloadsCount: 0,
+              owner: undefined,
+              updatedAt: undefined
             };
 
             return offlineBook;
@@ -161,7 +238,7 @@ export default function Library() {
       if (!matchesSearch) return false;
 
       if (activeFilter === 'downloaded') return book.isDownloaded;
-      if (activeFilter === 'reading') return book.progress > 0 && book.progress < 100;
+      if (activeFilter === 'reading') return (book.progress || 0) > 0 && (book.progress || 0) < 100;
       
       return true;
     });
@@ -207,21 +284,46 @@ export default function Library() {
     }
   };
 
-  const handleRemoveDownload = async (book: BookType) => {
+  const openOptions = (book: BookType) => {
+    setSelectedBook(book);
+    setModalVisible(true);
+  };
+
+  // Ação 1: Remover do dispositivo local
+  const handleDeleteLocal = async () => {
+    if (!selectedBook) return;
+    try {
+        await fileManager.deleteBook(selectedBook.id);
+        Alert.alert("Removido", "O livro foi removido deste dispositivo.");
+        onRefresh();
+    } catch (e) {
+        Alert.alert("Erro", "Não foi possível remover o arquivo.");
+    }
+  };
+
+  // Ação 2: Deletar da nuvem (API)
+  const handleDeleteRemote = async () => {
+    if (!selectedBook) return;
+    
     Alert.alert(
-      "Remover Download",
-      "Deseja apagar este livro do dispositivo?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Apagar", 
-          style: 'destructive',
-          onPress: async () => {
-            await fileManager.deleteBook(book.id);
-            onRefresh();
-          }
-        }
-      ]
+        "Tem certeza?",
+        "Isso apagará o livro permanentemente para todos.",
+        [
+            { text: "Cancelar", style: "cancel" },
+            { 
+                text: "Apagar", 
+                style: "destructive",
+                onPress: async () => {
+                    const success = await deleteBook(selectedBook.id);
+                    if (success) {
+                        Alert.alert("Sucesso", "Livro excluído.");
+                        onRefresh();
+                    } else {
+                        Alert.alert("Erro", "Falha ao excluir.");
+                    }
+                }
+            }
+        ]
     );
   };
 
@@ -261,11 +363,18 @@ export default function Library() {
             <Text className="text-zinc-100 font-bold text-base leading-5 mb-1 flex-1 mr-2" numberOfLines={2}>
               {item.title}
             </Text>
-            {item.isDownloaded && (
-              <TouchableOpacity onPress={() => handleRemoveDownload(item)} hitSlop={10}>
-                <MoreVertical size={16} color="#52525b" />
-              </TouchableOpacity>
-            )}
+            
+            {/* Botão de Opções (3 pontos) */}
+            <TouchableOpacity 
+                onPress={(e) => {
+                    e.stopPropagation(); // Evita abrir o livro ao clicar no menu
+                    openOptions(item);
+                }} 
+                className="p-1 -mr-2 -mt-2"
+                hitSlop={15}
+            >
+                <MoreVertical size={18} color="#71717a" />
+            </TouchableOpacity>
           </View>
           <Text className="text-zinc-400 text-xs font-medium" numberOfLines={1}>
             {item.author || "Autor Desconhecido"}
@@ -275,11 +384,11 @@ export default function Library() {
         <View>
             <View className="flex-row items-center justify-between mb-2">
                 <Text className="text-xs text-zinc-500">
-                    {item.progress > 0 ? `${Math.round(item.progress)}% lido` : 'Não iniciado'}
+                    {(item.progress || 0) > 0 ? `${Math.round(item.progress || 0)}% lido` : 'Não iniciado'}
                 </Text>
             </View>
             <View className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                <View className="h-full bg-emerald-500 rounded-full" style={{ width: `${item.progress}%` }} />
+                <View className="h-full bg-emerald-500 rounded-full" style={{ width: `${item.progress || 0}%` }} />
             </View>
         </View>
       </View>
@@ -353,6 +462,17 @@ export default function Library() {
           />
         )}
       </SafeAreaView>
+
+      {/* Modal de Ações */}
+      <BookOptionsModal 
+        visible={modalVisible}
+        book={selectedBook}
+        onClose={() => setModalVisible(false)}
+        onDeleteLocal={handleDeleteLocal}
+        onDeleteRemote={handleDeleteRemote}
+        // Permite deletar remotamente se o usuário for o dono ou Admin
+        canDeleteRemote={isConnected && (selectedBook?.userId === user?.id || user?.role === 'ADMIN')}
+      />
     </View>
   );
 }

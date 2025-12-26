@@ -92,10 +92,22 @@ export interface RankingUser {
 
 export interface Message {
   id: string;
-  content: string;
+  content: string | null;
+  imageUrl?: string | null;
+  audioUrl?: string | null;
+  fileUrl?: string | null;   // <--- NOVO
+  fileName?: string | null;  // <--- NOVO
+  fileSize?: number | null;  // <--- NOVO
+  type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE';
   createdAt: string;
   senderId: string;
   sender: { id: string; name: string; image: string | null };
+  replyTo?: {
+    id: string;
+    content: string | null;
+    type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE';
+    sender: { name: string };
+  } | null;
 }
 
 export interface Conversation {
@@ -105,6 +117,13 @@ export interface Conversation {
   product?: { title: string; images: { url: string }[] };
   messages: Message[]; // Apenas a última
 }
+
+export interface UserPreferences {
+  wallpaperUrl: string | null;
+  myBubbleColor: string;
+  otherBubbleColor: string;
+}
+
 // ==========================================================
 
 // Interceptor para injetar o token automaticamente
@@ -568,9 +587,108 @@ export const getMessages = async (conversationId: string): Promise<Message[]> =>
   return data;
 };
 
-export const sendMessage = async (conversationId: string, content: string) => {
-  const { data } = await api.post(`/mobile/chat/${conversationId}/messages`, { content });
+export const sendMessage = async (
+  conversationId: string, 
+  content: string, 
+  imageUri?: string,
+  audioUri?: string,
+  replyToId?: string,
+  fileAsset?: { uri: string; name: string; mimeType: string; size?: number } // <--- NOVO PARÂMETRO
+) => {
+  const formData = new FormData();
+  
+  if (content && content.trim()) formData.append('content', content);
+  
+  if (imageUri) {
+    const filename = imageUri.split('/').pop() || 'image.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+    formData.append('image', { uri: imageUri, name: filename, type } as any);
+  }
+
+  if (audioUri) {
+    formData.append('audio', { uri: audioUri, name: 'voice.m4a', type: 'audio/m4a' } as any);
+  }
+
+  if (fileAsset) {
+    formData.append('file', {
+      uri: fileAsset.uri,
+      name: fileAsset.name || 'documento',
+      type: fileAsset.mimeType || 'application/octet-stream',
+      size: fileAsset.size
+    } as any);
+  }
+
+  if (replyToId) {
+    formData.append('replyToId', replyToId);
+  }
+
+  const { data } = await api.post(`/mobile/chat/${conversationId}/messages`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
+};
+
+// Nova função de Delete em Batch
+export const deleteMessages = async (messageIds: string[], type: 'ME' | 'EVERYONE') => {
+  const { data } = await api.post('/mobile/chat/messages/delete', { messageIds, type });
+  return data;
+};
+
+export const getUserPreferences = async (): Promise<UserPreferences | null> => {
+  try {
+    const { data } = await api.get('/mobile/preferences');
+    return data;
+  } catch (error) {
+    console.error("Erro ao carregar preferências", error);
+    return null;
+  }
+};
+
+export const saveUserPreferences = async (
+  myColor: string, 
+  otherColor: string, 
+  wallpaperUri?: string | null
+): Promise<UserPreferences | null> => {
+  const formData = new FormData();
+  formData.append('myBubbleColor', myColor);
+  formData.append('otherBubbleColor', otherColor);
+
+  if (wallpaperUri) {
+    const filename = wallpaperUri.split('/').pop() || 'wallpaper.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+    
+    formData.append('wallpaper', {
+      uri: wallpaperUri,
+      name: filename,
+      type,
+    } as any);
+  } else if (wallpaperUri === null) {
+    // Se for explicitamente null, sinaliza para remover
+    formData.append('removeWallpaper', 'true');
+  }
+
+  try {
+    const { data } = await api.post('/mobile/preferences', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  } catch (error) {
+    console.error("Erro ao salvar preferências", error);
+    throw error;
+  }
+};
+
+export const deleteBook = async (bookId: string) => {
+  try {
+    // Rota backend para deletar o livro
+    await api.delete(`/mobile/books/${bookId}`);
+    return true;
+  } catch (error) {
+    console.error('Erro ao deletar livro:', error);
+    return false;
+  }
 };
 
 export { PublicUserProfile };
