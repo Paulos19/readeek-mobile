@@ -763,4 +763,12 @@ export const logout = async () => {
   return true;
 };
 
+export const aiService = {
+  fixGrammar: async (text: string) => {
+    // Ajuste a URL conforme seu ambiente local ou prod
+    const response = await api.post('/mobile/writer/ai/fix', { text });
+    return response.data;
+  }
+};
+
 export { PublicUserProfile };
