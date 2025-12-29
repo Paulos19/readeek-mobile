@@ -1,7 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
-import { StandardTabBar } from './_components/ui/TabBar/StandardTabBar'; // Ajuste o caminho se necessário
+import { StandardTabBar } from './_components/ui/TabBar/StandardTabBar'; 
 
 export default function AppLayout() {
   return (
@@ -9,7 +8,6 @@ export default function AppLayout() {
       tabBar={(props) => <StandardTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        // Oculta a tab bar quando o teclado abre (opcional, mas bom para UX de chat)
         tabBarHideOnKeyboard: true, 
         animation: 'shift',
       }}
@@ -24,13 +22,11 @@ export default function AppLayout() {
         options={{ title: 'Library' }} 
       />
 
-      {/* NOVA ROTA SOCIAL (CENTRAL) */}
       <Tabs.Screen 
         name="social" 
         options={{ title: 'Social' }} 
       />
 
-      {/* Rota de Comunidades (Lista) */}
       <Tabs.Screen 
         name="community" 
         options={{ title: 'Communities' }} 
@@ -41,9 +37,34 @@ export default function AppLayout() {
         options={{ title: 'Profile' }} 
       />
 
+      {/* --- CORREÇÃO AQUI --- */}
+      {/* Registramos o Writer para sumir com a TabBar de forma declarativa */}
+      <Tabs.Screen 
+        name="writer" 
+        options={{ 
+          href: null, // Não cria botão na barra
+          tabBarStyle: { display: 'none' }, // Remove a barra fisicamente
+          headerShown: false 
+        }} 
+      />
+
       {/* Rotas ocultas da TabBar (Detail Pages) */}
       <Tabs.Screen 
         name="read/[bookId]/index" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      
+      {/* Outras rotas que não devem ter tab bar (ex: chat, shop details) devem seguir esse padrão */}
+      <Tabs.Screen 
+        name="chat/[id]" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+       <Tabs.Screen 
+        name="product/[id]" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="shop/[id]" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
       />
     </Tabs>
