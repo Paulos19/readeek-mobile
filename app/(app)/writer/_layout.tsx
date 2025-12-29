@@ -1,35 +1,39 @@
 import { Stack, useNavigation } from 'expo-router';
 import React, { useLayoutEffect } from 'react';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 
 export default function WriterLayout() {
   const navigation = useNavigation();
 
-  // Esconder a TabBar (que pertence ao layout pai) quando entrar no Writer Studio
+  // Lógica para esconder a TabBar do pai ((app)) enquanto estiver neste contexto
   useLayoutEffect(() => {
-    // Pega o navegador pai (que é o Tabs) e esconde a barra
     const parent = navigation.getParent();
-    parent?.setOptions({
-      tabBarStyle: { display: 'none' }
-    });
-
-    // Quando sair do Writer Studio (unmount), mostra a barra de novo
-    return () => {
-      parent?.setOptions({
-        tabBarStyle: {
-          backgroundColor: '#09090b',
-          borderTopColor: '#27272a',
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          elevation: 0,
-          display: 'flex' // Restaura
-        }
+    
+    if (parent) {
+      parent.setOptions({
+        tabBarStyle: { display: 'none' } // Esconde a barra
       });
+    }
+
+    return () => {
+      // Restaura a barra quando sair do Writer Studio
+      if (parent) {
+        parent.setOptions({
+          tabBarStyle: {
+            display: 'flex',
+            backgroundColor: '#09090b',
+            borderTopColor: '#27272a',
+            height: Platform.OS === 'ios' ? 85 : 65,
+            paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+            paddingTop: 10,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            elevation: 0,
+          }
+        });
+      }
     };
   }, [navigation]);
 
@@ -43,7 +47,13 @@ export default function WriterLayout() {
         }} 
       >
         <Stack.Screen name="index" />
-        <Stack.Screen name="create" options={{ presentation: 'modal' }} />
+        <Stack.Screen 
+          name="create" 
+          options={{ 
+            presentation: 'modal',
+            animation: 'slide_from_bottom' 
+          }} 
+        />
         <Stack.Screen name="[draftId]/index" />
         <Stack.Screen name="[draftId]/editor/[chapterId]" />
       </Stack>

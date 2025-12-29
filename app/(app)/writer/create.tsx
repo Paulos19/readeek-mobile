@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, ActivityIndicator, 
-  KeyboardAvoidingView, Platform, ScrollView, StatusBar, Keyboard 
+  KeyboardAvoidingView, Platform, ScrollView, StatusBar, Keyboard, TouchableWithoutFeedback 
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Book, Sparkles, X } from 'lucide-react-native';
+import { Feather, Book, Sparkles, X, ChevronLeft } from 'lucide-react-native';
 import { useAuthStore } from '../../../stores/useAuthStore';
 import { api } from '../../../lib/api';
-import { WriterAlert } from './_components/WriterAlert'; // Importe o alerta
+import { WriterAlert, WriterAlertType } from './_components/WriterAlert';
 
 export default function CreateDraftScreen() {
   const router = useRouter();
@@ -19,13 +19,12 @@ export default function CreateDraftScreen() {
   const [genre, setGenre] = useState('');
   const [synopsis, setSynopsis] = useState('');
   
-  // Estado para controlar qual input está focado (para o estilo visual)
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
-  // Estados do Alerta
-  const [alertConfig, setAlertConfig] = useState<{
+  // Controle do Alerta Customizado
+  const [alertState, setAlertState] = useState<{
     visible: boolean;
-    type: 'success' | 'error' | 'info';
+    type: WriterAlertType;
     title: string;
     message: string;
     onConfirm?: () => void;
@@ -33,71 +32,93 @@ export default function CreateDraftScreen() {
     visible: false, type: 'info', title: '', message: ''
   });
 
-  const showAlert = (type: 'success' | 'error' | 'info', title: string, message: string, onConfirm?: () => void) => {
-    setAlertConfig({ visible: true, type, title, message, onConfirm });
+  const showAlert = (type: WriterAlertType, title: string, message: string, onConfirm?: () => void) => {
+    setAlertState({ visible: true, type, title, message, onConfirm });
   };
+
+  const closeAlert = () => setAlertState(prev => ({ ...prev, visible: false }));
 
   const handleCreate = async () => {
     Keyboard.dismiss();
     
     if (!title.trim()) {
-      return showAlert('error', 'Título Obrigatório', 'Por favor, dê um nome à sua obra.');
+      return showAlert('error', 'Título Ausente', 'Toda grande história precisa de um nome. Como se chamará a sua?');
     }
     
     if ((user?.credits || 0) < 15) {
-      return showAlert('error', 'Saldo Insuficiente', 'Você precisa de 15 créditos para iniciar um novo projeto.');
+      return showAlert('error', 'Créditos Insuficientes', 'Você precisa de 15 créditos para abrir uma nova sala de criação.');
     }
 
-    try {
-      setLoading(true);
-      const res = await api.post('/mobile/writer/drafts/create', {
-        title,
-        genre,
-        synopsis
-      });
+    showAlert(
+        'info', 
+        'Confirmar Criação', 
+        `Deseja gastar 15 créditos para iniciar o projeto "${title}"?`,
+        async () => {
+            // Callback de confirmação
+            closeAlert();
+            try {
+                setLoading(true);
+                const res = await api.post('/mobile/writer/drafts/create', {
+                    title,
+                    genre,
+                    synopsis
+                });
 
-      if (user) {
-        updateUser({ ...user, credits: user.credits - 15 });
-      }
+                if (user) updateUser({ ...user, credits: user.credits - 15 });
 
-      // Sucesso
-      showAlert('success', 'Projeto Criado!', 'Seu universo foi inicializado com sucesso.', () => {
-        setAlertConfig(prev => ({...prev, visible: false})); // Fecha o modal
-        router.replace(`/writer/${res.data.id}` as any);
-      });
+                // Redireciona direto, sem segundo alerta (mais fluido)
+                router.replace(`/writer/${res.data.id}` as any);
 
-    } catch (error: any) {
-      showAlert('error', 'Erro', error.response?.data?.error || "Falha ao criar o livro.");
-    } finally {
-      setLoading(false);
-    }
+            } catch (error: any) {
+                setTimeout(() => { // Timeout para evitar conflito de modais
+                    showAlert('error', 'Ops!', error.response?.data?.error || "Falha ao criar o livro.");
+                }, 300);
+            } finally {
+                setLoading(false);
+            }
+        }
+    );
   };
 
-  // Componente de Input Reutilizável com Estilo de Foco
+  // Input Customizado com Animação de Foco
   const CustomInput = ({ 
-    label, value, onChangeText, placeholder, multiline = false, id 
+    label, value, onChangeText, placeholder, multiline = false, id, icon: Icon 
   }: any) => {
     const isFocused = focusedInput === id;
+    
     return (
-      <View className="mb-6">
-        <Text className={`text-xs font-bold uppercase mb-2 ml-1 ${isFocused ? 'text-indigo-400' : 'text-zinc-500'}`}>
+      <View className="mb-5">
+        <Text className={`text-xs font-bold uppercase mb-2 ml-1 tracking-wider ${isFocused ? 'text-indigo-400' : 'text-zinc-500'}`}>
           {label}
         </Text>
         <View 
-          className={`bg-zinc-900 border rounded-2xl transition-all ${isFocused ? 'border-indigo-500 shadow-sm shadow-indigo-500/20' : 'border-zinc-800'}`}
+          className={`
+            bg-zinc-900/80 border rounded-2xl flex-row items-start
+            ${isFocused ? 'border-indigo-500 bg-zinc-900' : 'border-zinc-800'}
+          `}
+          style={{ 
+            shadowColor: isFocused ? '#6366f1' : 'transparent',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 10,
+            elevation: isFocused ? 5 : 0
+          }}
         >
-          <TextInput 
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor="#52525b"
-            onFocus={() => setFocusedInput(id)}
-            onBlur={() => setFocusedInput(null)}
-            className={`p-4 text-white font-medium ${multiline ? 'min-h-[120px] text-top' : 'h-14'}`}
-            multiline={multiline}
-            textAlignVertical={multiline ? 'top' : 'center'}
-            style={{ fontSize: 16 }}
-          />
+            <View className="pt-4 pl-4">
+                <Icon size={18} color={isFocused ? '#818cf8' : '#52525b'} />
+            </View>
+            <TextInput 
+                value={value}
+                onChangeText={onChangeText}
+                placeholder={placeholder}
+                placeholderTextColor="#3f3f46"
+                onFocus={() => setFocusedInput(id)}
+                onBlur={() => setFocusedInput(null)}
+                className={`flex-1 p-4 text-white font-medium text-base ${multiline ? 'min-h-[120px] pt-3.5' : 'h-14'}`}
+                multiline={multiline}
+                textAlignVertical={multiline ? 'top' : 'center'}
+                autoCapitalize={id === 'title' ? 'words' : 'sentences'}
+            />
         </View>
       </View>
     );
@@ -107,51 +128,62 @@ export default function CreateDraftScreen() {
     <View className="flex-1 bg-black">
       <StatusBar barStyle="light-content" />
       
-      {/* Background Decorativo Fixo */}
-      <LinearGradient colors={['#312e81', '#000']} className="h-80 absolute w-full top-0" />
-      
+      {/* Elementos de Fundo */}
+      <View className="absolute top-0 left-0 right-0 h-[400px]">
+        <LinearGradient colors={['#312e81', '#000']} className="w-full h-full opacity-60" />
+      </View>
+
       <WriterAlert 
-        {...alertConfig} 
-        onCancel={() => setAlertConfig(p => ({...p, visible: false}))} 
-        singleButton={alertConfig.type === 'success'}
+        {...alertState} 
+        onCancel={closeAlert} 
+        singleButton={alertState.type === 'success' || alertState.type === 'error'}
       />
+
+      {/* Header de Navegação */}
+      <View className="flex-row items-center justify-between px-6 pt-14 pb-4 z-10">
+        <TouchableOpacity 
+            onPress={() => router.back()} 
+            className="w-10 h-10 bg-black/40 rounded-full items-center justify-center border border-white/10 backdrop-blur-md"
+        >
+            <ChevronLeft color="white" size={24} />
+        </TouchableOpacity>
+        
+        <View className="bg-indigo-500/20 px-3 py-1 rounded-full border border-indigo-500/30 backdrop-blur-md">
+            <Text className="text-indigo-200 text-xs font-bold uppercase tracking-widest">
+                Saldo: {user?.credits || 0} CR
+            </Text>
+        </View>
+      </View>
 
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <ScrollView 
-          contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          
-          {/* Header de Navegação */}
-          <TouchableOpacity 
-            onPress={() => router.back()} 
-            className="mt-8 mb-6 w-10 h-10 bg-zinc-900/50 rounded-full items-center justify-center border border-white/10"
-          >
-            <X color="white" size={20} />
-          </TouchableOpacity>
-
-          {/* Cabeçalho Visual */}
-          <View className="items-center mb-10">
-            <View className="w-20 h-20 bg-indigo-500/20 rounded-3xl items-center justify-center border border-indigo-500/50 mb-4 shadow-xl shadow-indigo-500/40 transform rotate-3">
+          {/* Título da Página */}
+          <View className="items-center mb-8 mt-2">
+            <View className="w-20 h-20 bg-indigo-500/20 rounded-3xl items-center justify-center border border-indigo-500/50 mb-4 shadow-2xl shadow-indigo-500/30 transform -rotate-6">
               <Sparkles color="#818cf8" size={32} />
             </View>
-            <Text className="text-white font-black text-3xl text-center tracking-tight">Nova Obra</Text>
-            <View className="bg-indigo-900/30 px-3 py-1 rounded-full border border-indigo-500/30 mt-3">
-              <Text className="text-indigo-300 text-xs font-bold uppercase tracking-widest">
-                Custo: 15 Créditos
-              </Text>
-            </View>
+            <Text className="text-white font-black text-3xl text-center tracking-tighter">
+                Novo Universo
+            </Text>
+            <Text className="text-zinc-400 text-sm text-center mt-1 w-2/3">
+                Preencha os detalhes básicos para começar a sua obra.
+            </Text>
           </View>
 
           {/* Formulário */}
-          <View className="bg-zinc-950/50 p-1 rounded-3xl">
+          <View>
             <CustomInput 
               id="title"
               label="Título da Obra"
+              icon={Book}
               value={title}
               onChangeText={setTitle}
               placeholder="Ex: As Crónicas de Readeek"
@@ -160,6 +192,7 @@ export default function CreateDraftScreen() {
             <CustomInput 
               id="genre"
               label="Gênero Literário"
+              icon={Feather}
               value={genre}
               onChangeText={setGenre}
               placeholder="Ex: Fantasia, Sci-Fi..."
@@ -167,7 +200,8 @@ export default function CreateDraftScreen() {
 
             <CustomInput 
               id="synopsis"
-              label="Sinopse Breve"
+              label="Sinopse / Ideia Inicial"
+              icon={Feather}
               value={synopsis}
               onChangeText={setSynopsis}
               placeholder="Sobre o que é a sua história?"
@@ -180,29 +214,27 @@ export default function CreateDraftScreen() {
             onPress={handleCreate}
             disabled={loading}
             activeOpacity={0.8}
-            className="mt-8"
+            className="mt-6 shadow-lg shadow-indigo-500/20"
           >
             <LinearGradient
-              colors={['#4f46e5', '#4338ca']}
-              start={{x: 0, y: 0}} end={{x: 1, y: 0}}
-              className="p-5 rounded-2xl items-center flex-row justify-center shadow-lg shadow-indigo-500/30"
+              colors={['#4f46e5', '#3730a3']}
+              start={{x: 0, y: 0}} end={{x: 1, y: 1}}
+              className="p-5 rounded-2xl items-center flex-row justify-center border border-white/10"
             >
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
                 <>
-                  <Book color="white" size={20} style={{ marginRight: 10 }} />
-                  <Text className="text-white font-black text-base tracking-wide uppercase">
-                    Confirmar Criação
+                  <Text className="text-white font-black text-base tracking-widest uppercase mr-2">
+                    Iniciar Projeto
                   </Text>
+                  <View className="bg-black/20 px-2 py-0.5 rounded ml-2">
+                    <Text className="text-indigo-200 text-[10px] font-bold">-15 CR</Text>
+                  </View>
                 </>
               )}
             </LinearGradient>
           </TouchableOpacity>
-          
-          <Text className="text-zinc-600 text-center text-xs mt-6 font-medium">
-            Seu saldo atual: <Text className="text-zinc-400">{user?.credits} CR</Text>
-          </Text>
 
         </ScrollView>
       </KeyboardAvoidingView>

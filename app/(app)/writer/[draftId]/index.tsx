@@ -1,11 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, StatusBar } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+import { Feather, FileText, Settings, Users, Globe, ChevronRight, Plus, Download } from 'lucide-react-native';
 import { api } from '../../../../lib/api';
 import { useAuthStore } from '../../../../stores/useAuthStore';
-import { ChevronRight, Download, FileText, Globe, Plus, Settings, Users2 } from 'lucide-react-native';
+
+// Importando os componentes do Writer Studio
+import { CharactersTab } from './_components/CharactersTab';
+import { LoreTab } from './_components/LoreTab';
+import { DraftSettingsModal } from './_components/DraftSettingsModal';
 
 export default function DraftDashboard() {
   const { draftId } = useLocalSearchParams();
@@ -14,17 +18,13 @@ export default function DraftDashboard() {
   
   const [draft, setDraft] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false); // Estado de loading para exportação
+  const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<'chapters' | 'characters' | 'lore'>('chapters');
-
-  useFocusEffect(
-    useCallback(() => {
-      loadDraftDetails();
-    }, [draftId])
-  );
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   const loadDraftDetails = async () => {
     try {
+      // Não ativamos o loading global aqui para não piscar a tela ao atualizar abas secundárias
       const res = await api.get(`/mobile/writer/drafts/${draftId}`);
       setDraft(res.data);
     } catch (error) {
@@ -35,6 +35,14 @@ export default function DraftDashboard() {
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      // Loading inicial apenas na primeira montagem ou foco
+      if (!draft) setLoading(true);
+      loadDraftDetails();
+    }, [draftId])
+  );
+
   const handleAddChapter = async () => {
     try {
       const res = await api.post('/mobile/writer/chapters', { draftId });
@@ -44,7 +52,6 @@ export default function DraftDashboard() {
     }
   };
 
-  // --- NOVA FUNÇÃO DE EXPORTAÇÃO ---
   const handleExport = () => {
     if (!draft.chapters || draft.chapters.length === 0) {
       return Alert.alert("Livro Vazio", "Escreva pelo menos um capítulo antes de publicar.");
@@ -58,16 +65,21 @@ export default function DraftDashboard() {
         { 
           text: "Confirmar (-25 CR)", 
           onPress: async () => {
+            if ((user?.credits || 0) < 25) {
+                return Alert.alert("Erro", "Saldo insuficiente.");
+            }
+
             try {
               setExporting(true);
               const res = await api.post(`/mobile/writer/drafts/${draftId}/export`);
               
-              // Atualizar créditos visualmente
               if (user) updateUser({ ...user, credits: user.credits - 25 });
+
+              const actionText = res.data.action === 'updated' ? 'atualizado' : 'gerado';
 
               Alert.alert(
                 "Sucesso! 🎉", 
-                "O seu livro foi gerado e adicionado à sua biblioteca.",
+                `O seu livro foi ${actionText} e adicionado à sua biblioteca.`,
                 [
                   { text: "Abrir Biblioteca", onPress: () => router.push('/dashboard/library') },
                   { text: "Ler Agora", onPress: () => router.push(`/read/${res.data.bookId}`) }
@@ -96,7 +108,7 @@ export default function DraftDashboard() {
         <LinearGradient colors={['#312e81', '#1e1b4b', '#000']} className="absolute inset-0" />
         <View className="absolute bottom-0 w-full p-6 pb-6">
             <TouchableOpacity onPress={() => router.back()} className="mb-4 bg-black/20 self-start p-2 rounded-full">
-                <Feather name="arrow-left" color="white" size={20} />
+                <Feather color="white" size={20} />
             </TouchableOpacity>
             
             <Text className="text-indigo-300 font-bold text-xs uppercase tracking-widest mb-1">
@@ -106,13 +118,17 @@ export default function DraftDashboard() {
               {draft.title}
             </Text>
             
-            <View className="flex-row space-x-3">
-                <TouchableOpacity className="flex-row items-center bg-indigo-500/20 px-4 py-2 rounded-xl border border-indigo-500/30">
+            <View className="flex-row space-x-3 gap-3">
+                {/* BOTÃO CONFIGURAÇÕES */}
+                <TouchableOpacity 
+                    onPress={() => setSettingsVisible(true)}
+                    className="flex-row items-center bg-indigo-500/20 px-4 py-2 rounded-xl border border-indigo-500/30"
+                >
                     <Settings size={14} color="#a5b4fc" />
                     <Text className="text-indigo-200 text-xs font-bold ml-2">Configurar</Text>
                 </TouchableOpacity>
                 
-                {/* BOTÃO DE EXPORTAR ATIVO */}
+                {/* BOTÃO EXPORTAR */}
                 <TouchableOpacity 
                   onPress={handleExport}
                   disabled={exporting}
@@ -135,7 +151,7 @@ export default function DraftDashboard() {
       <View className="flex-row px-6 border-b border-zinc-800 mb-4">
         {[
             { key: 'chapters', label: 'Capítulos', icon: FileText },
-            { key: 'characters', label: 'Personagens', icon: Users2 },
+            { key: 'characters', label: 'Personagens', icon: Users },
             { key: 'lore', label: 'Mundo', icon: Globe }
         ].map((tab) => (
             <TouchableOpacity 
@@ -152,8 +168,9 @@ export default function DraftDashboard() {
       </View>
 
       {/* CONTEÚDO DA TAB */}
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
         
+        {/* ABA CAPÍTULOS */}
         {activeTab === 'chapters' && (
             <View>
                 <TouchableOpacity 
@@ -193,21 +210,33 @@ export default function DraftDashboard() {
             </View>
         )}
 
-        {/* Placeholders */}
+        {/* ABA PERSONAGENS */}
         {activeTab === 'characters' && (
-            <View className="items-center mt-20 opacity-50">
-                <Users2 size={64} color="#3f3f46" />
-                <Text className="text-zinc-500 mt-4 text-center font-bold">O Criador de Personagens{"\n"}chega na próxima atualização.</Text>
-            </View>
+            <CharactersTab 
+                draftId={draftId as string} 
+                characters={draft.characters || []} 
+                onRefresh={loadDraftDetails}
+            />
         )}
+
+        {/* ABA LORE */}
         {activeTab === 'lore' && (
-            <View className="items-center mt-20 opacity-50">
-                <Globe size={64} color="#3f3f46" />
-                <Text className="text-zinc-500 mt-4 text-center font-bold">O World Building{"\n"}chega na próxima atualização.</Text>
-            </View>
+            <LoreTab 
+                draftId={draftId as string} 
+                lore={draft.lore || []} 
+                onRefresh={loadDraftDetails}
+            />
         )}
 
       </ScrollView>
+
+      {/* MODAL DE CONFIGURAÇÕES */}
+      <DraftSettingsModal 
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+        draft={draft}
+      />
+
     </View>
   );
 }
