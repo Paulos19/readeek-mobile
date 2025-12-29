@@ -4,11 +4,10 @@ import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
-import { fileManager } from 'lib/files';
-import { syncProgress, highlightService, Highlight } from 'lib/api';
+import { highlightService, syncProgress, Highlight, api } from '../../../../../lib/api';
 import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
-import { useReadingStore } from 'stores/useReadingStore';
+import { useReadingStore } from '../../../../../stores/useReadingStore';
 
 export const THEMES = {
     dark: { name: 'Escuro', bg: '#09090b', text: '#e4e4e7', ui: 'dark' },
@@ -19,21 +18,15 @@ export const THEMES = {
 // Script para forçar a geração de paginação e corrigir o "0%"
 const LOCATION_GENERATION_SCRIPT = `
     if (window.book) {
-        // Aguarda o livro estar pronto
         window.book.ready.then(() => {
-            // Se ainda não gerou localizações, gera agora (1000 chars por página aprox.)
             if (window.book.locations.length() === 0) {
-                console.log("Gerando localizações para cálculo de progresso...");
-                // Gera em background para não travar tanto
+                console.log("Gerando localizações...");
                 return window.book.locations.generate(1000); 
             }
         }).then(() => {
-            console.log("Localizações geradas. Total:", window.book.locations.length());
-            // Força um evento de localização para atualizar a UI imediatamente
             var currentLocation = window.rendition.currentLocation();
             if (currentLocation && currentLocation.start) {
                var cfi = currentLocation.start.cfi;
-               // Agora isso deve retornar um número > 0
                var percentage = window.book.locations.percentageFromCfi(cfi);
                
                window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -42,7 +35,7 @@ const LOCATION_GENERATION_SCRIPT = `
                    percentage: percentage
                }));
             }
-        }).catch(err => console.log("Erro gerando locations:", err));
+        }).catch(err => console.log("Erro locations:", err));
     }
 `;
 
@@ -60,12 +53,14 @@ const flattenToc = (items: any[]): any[] => {
 export function useReader(rawBookId: string | string[]) {
     const router = useRouter();
     const navigation = useNavigation();
-    const params = useLocalSearchParams(); 
     
-    const { setLastRead, updateProgress: updateGlobalProgress } = useReadingStore();
+    // Zustand Store
+    const { books, setBooks, setLastRead, updateProgress: updateGlobalProgress } = useReadingStore();
 
     const webviewRef = useRef<WebView>(null);
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    
+    // --- CORREÇÃO: Adicionando a declaração que faltava ---
     const navigatingRef = useRef(false);
     
     // Ref para salvar o último progresso conhecido (para o unmount)
@@ -73,23 +68,27 @@ export function useReader(rawBookId: string | string[]) {
 
     const bookId = Array.isArray(rawBookId) ? rawBookId[0] : rawBookId;
 
+    // Estados
     const [isLoading, setIsLoading] = useState(true);
     const [bookBase64, setBookBase64] = useState<string | null>(null);
     const [initialLocation, setInitialLocation] = useState<string | null>(null);
     const [highlights, setHighlights] = useState<Highlight[]>([]);
     const [toc, setToc] = useState<any[]>([]);
     const [progress, setProgress] = useState(0);
+    const [bookMeta, setBookMeta] = useState<any>(null);
 
+    // UI
     const [menuVisible, setMenuVisible] = useState(false);
     const [menuExpanded, setMenuExpanded] = useState(false);
     const [activeTab, setActiveTab] = useState<'settings' | 'chapters' | 'highlights'>('settings');
     
+    // Configurações
     const [fontSize, setFontSize] = useState(100);
     const fontSizeSv = useSharedValue(100); 
-
     const [currentTheme, setCurrentTheme] = useState<'dark' | 'light' | 'sepia'>('dark');
     const [selection, setSelection] = useState<{ cfiRange: string; text: string } | null>(null);
 
+    // Fullscreen mode
     useEffect(() => {
         navigation.setOptions({
             tabBarStyle: { display: 'none' },
@@ -99,12 +98,11 @@ export function useReader(rawBookId: string | string[]) {
 
     useEffect(() => { fontSizeSv.value = fontSize; }, [fontSize]);
 
-    // SALVA PROGRESSO AO SAIR DA TELA (CLEANUP)
+    // Cleanup: Salvar progresso ao sair
     useEffect(() => {
         return () => {
             if (latestProgressRef.current) {
                 const { cfi, pct } = latestProgressRef.current;
-                // Só salva se tiver dados válidos e progresso > 0 (ou CFI válido)
                 if (cfi && pct >= 0) {
                     console.log(`[Reader] Salvando progresso ao sair: ${Math.round(pct * 100)}%`);
                     syncProgress(bookId, cfi, pct);
@@ -113,16 +111,50 @@ export function useReader(rawBookId: string | string[]) {
         };
     }, [bookId]);
 
+    // LOAD PRINCIPAL
     useEffect(() => {
         if (!bookId) { router.back(); return; }
+
         const load = async () => {
             try {
-                const [savedSize, savedTheme, savedCfi, remoteHighlights, bookExists] = await Promise.all([
+                setIsLoading(true);
+
+                // 1. Tenta encontrar metadados do livro (Store -> API)
+                let currentBook = books.find((b: { id: string; }) => b.id === bookId);
+
+                if (!currentBook) {
+                    console.log("[Reader] Livro não encontrado no cache, buscando API...");
+                    const res = await api.get('/mobile/books');
+                    if (res.data) {
+                        setBooks(res.data);
+                        currentBook = res.data.find((b: any) => b.id === bookId);
+                    }
+                }
+
+                if (!currentBook) throw new Error("Livro não encontrado na biblioteca.");
+                setBookMeta(currentBook);
+
+                // 2. Verifica se o arquivo existe localmente, senão baixa
+                const localUri = `${FileSystem.documentDirectory}${bookId}.epub`;
+                const fileInfo = await FileSystem.getInfoAsync(localUri);
+
+                if (!fileInfo.exists) {
+                    if (!currentBook.filePath) throw new Error("URL do livro inválida.");
+                    console.log("[Reader] Baixando livro...", currentBook.filePath);
+                    
+                    await FileSystem.downloadAsync(currentBook.filePath, localUri);
+                }
+
+                // 3. Lê o arquivo como Base64 para injetar na WebView
+                const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
+                setBookBase64(base64);
+
+                // 4. Carrega Preferências e Destaques
+                const [savedSize, savedTheme, savedCfi, remoteHighlights] = await Promise.all([
                     AsyncStorage.getItem('@reader_fontsize'),
                     AsyncStorage.getItem('@reader_theme'),
                     AsyncStorage.getItem(`@progress:${bookId}`),
                     highlightService.getByBook(bookId).catch(() => [] as Highlight[]),
-                    fileManager.checkBookExists(bookId)
                 ]);
 
                 if (savedSize) {
@@ -131,38 +163,36 @@ export function useReader(rawBookId: string | string[]) {
                     fontSizeSv.value = size;
                 }
                 if (savedTheme) setCurrentTheme(savedTheme as any);
-                if (savedCfi) setInitialLocation(savedCfi);
+                
+                // Prioridade de localização: Local > Remoto > 0
+                if (savedCfi) {
+                    setInitialLocation(savedCfi);
+                } else if (currentBook.currentLocation) {
+                    setInitialLocation(currentBook.currentLocation);
+                }
+
                 setHighlights(remoteHighlights);
 
-                if (!bookExists) throw new Error("Livro não encontrado");
-
-                const uri = fileManager.getLocalBookUri(bookId);
-                const info = await FileSystem.getInfoAsync(uri);
-                if (!info.exists || info.size === 0) throw new Error("Arquivo vazio");
-
-                const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-                setBookBase64(base64);
-
-                const potentialCoverPath = `${FileSystem.documentDirectory}books/${bookId}/cover.jpg`;
-                const coverInfo = await FileSystem.getInfoAsync(potentialCoverPath);
-                const validCoverUri = coverInfo.exists ? potentialCoverPath : null;
-
+                // 5. Atualiza "Última Leitura"
                 setLastRead({
                     id: bookId,
-                    title: (params.title as string) || "Leitura Atual",
-                    progress: progress || 0, 
-                    cover: validCoverUri 
+                    title: currentBook.title,
+                    progress: currentBook.progress || 0, 
+                    cover: currentBook.coverUrl 
                 });
 
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Reader Load Error:", error);
-                Alert.alert("Erro", "Falha ao carregar livro.");
+                Alert.alert("Erro", error.message || "Falha ao carregar livro.");
                 router.back();
-            } finally { setIsLoading(false); }
+            } finally { 
+                setIsLoading(false); 
+            }
         };
         load();
     }, [bookId]);
 
+    // Gestos e Ações
     const changeFontSize = useCallback(async (newValue: number) => {
         const safeValue = Math.max(50, Math.min(250, Math.round(newValue)));
         setFontSize(prev => {
@@ -186,23 +216,22 @@ export function useReader(rawBookId: string | string[]) {
             const data = JSON.parse(event.nativeEvent.data);
             switch(data.type) {
                 case 'LOC':
-                    // Aceita 0, mas evita undefined/null
                     if (typeof data.percentage === 'number') { 
                         const pct = data.percentage;
                         setProgress(pct);
                         
-                        // Atualiza Ref para o Unmount usar
+                        // Atualiza Ref
                         latestProgressRef.current = { cfi: data.cfi, pct };
 
-                        updateGlobalProgress(bookId, pct * 100);
+                        // Atualiza Store Global (UI)
+                        updateGlobalProgress(bookId, data.cfi, pct * 100);
 
+                        // Sync API (Debounce)
                         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
                         
-                        // Salva localmente imediatamente
                         AsyncStorage.setItem(`@progress:${bookId}`, data.cfi);
                         AsyncStorage.setItem(`@percent:${bookId}`, pct.toString());
 
-                        // Debounce para API (2 segundos)
                         syncTimeoutRef.current = setTimeout(() => {
                             syncProgress(bookId, data.cfi, pct);
                         }, 2000);
@@ -220,7 +249,6 @@ export function useReader(rawBookId: string | string[]) {
     }, [bookId, menuVisible, fontSize]);
 
     const onWebViewLoaded = () => {
-        // Injeta o script de correção de progresso assim que carregar
         webviewRef.current?.injectJavaScript(LOCATION_GENERATION_SCRIPT);
     };
 
@@ -270,7 +298,7 @@ export function useReader(rawBookId: string | string[]) {
     };
 
     return {
-        state: { isLoading, bookBase64, initialLocation, highlights, toc, fontSize, currentTheme, selection, menuVisible, menuExpanded, activeTab, progress },
+        state: { isLoading, bookBase64, initialLocation, highlights, toc, fontSize, currentTheme, selection, menuVisible, menuExpanded, activeTab, progress, bookMeta },
         actions: { setMenuVisible, setMenuExpanded, setActiveTab, toggleMenu, changeTheme, changeFontSize, goToChapter, nextPage, prevPage, addHighlight, removeHighlight, handleMessage, setSelection, onWebViewLoaded },
         refs: { webviewRef },
         gestures: { pinchGesture }

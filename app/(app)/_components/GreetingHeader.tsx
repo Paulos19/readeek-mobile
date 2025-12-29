@@ -18,7 +18,6 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { Book } from '../_types/book';
 import { User } from '../_types/user';
 import { notificationService, Notification, getMarketplaceStatus } from '../../../lib/api';
 
@@ -26,10 +25,19 @@ import { notificationService, Notification, getMarketplaceStatus } from '../../.
 import { NotificationsSheet } from './NotificationsSheet';
 import { SearchSheet } from './SearchSheet';
 
+// Interface compatível com Book (completo) e LastRead (cache)
+export interface MinimalBook {
+  id: string;
+  title: string;
+  author?: string | null;
+  coverUrl?: string | null;
+  progress?: number;
+}
+
 interface GreetingHeaderProps {
   user: User | null;
-  lastReadBook: Book | null;
-  onContinueReading: (book: Book) => void;
+  lastReadBook?: MinimalBook | null;
+  onContinueReading: (book: MinimalBook) => void;
 }
 
 // --- BADGE INTELIGENTE (NOVO -> BOLINHA) ---
@@ -329,12 +337,12 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
                             <View className="flex-1">
                                 <View className="flex-row justify-between mb-1.5">
                                     <Text className="text-zinc-400 text-[10px] font-medium">Progresso</Text>
-                                    <Text className="text-white text-[10px] font-bold">{lastReadBook.progress}%</Text>
+                                    <Text className="text-white text-[10px] font-bold">{Math.round(lastReadBook.progress || 0)}%</Text>
                                 </View>
                                 <View className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                                     <View 
                                         className="h-full bg-emerald-500 rounded-full" 
-                                        style={{ width: `${lastReadBook.progress}%` }} 
+                                        style={{ width: `${Math.min(lastReadBook.progress || 0, 100)}%` }} 
                                     />
                                 </View>
                             </View>
