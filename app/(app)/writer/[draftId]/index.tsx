@@ -2,11 +2,14 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, StatusBar } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, FileText, Settings, Users, Globe, ChevronRight, Plus, Download } from 'lucide-react-native';
+import { Feather, FileText, Settings, Users, Globe, ChevronRight, Plus, Download, Trash2 } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system/legacy'; // Importante para deletar localmente
+
 import { api } from '../../../../lib/api';
 import { useAuthStore } from '../../../../stores/useAuthStore';
+import { useReadingStore } from '../../../../stores/useReadingStore'; // Para atualizar a estante
 
-// Importando os componentes do Writer Studio
+// Componentes
 import { CharactersTab } from './_components/CharactersTab';
 import { LoreTab } from './_components/LoreTab';
 import { DraftSettingsModal } from './_components/DraftSettingsModal';
@@ -15,6 +18,7 @@ export default function DraftDashboard() {
   const { draftId } = useLocalSearchParams();
   const router = useRouter();
   const { user, updateUser } = useAuthStore();
+  const { setBooks } = useReadingStore(); // Para forçar refresh da biblioteca
   
   const [draft, setDraft] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +28,6 @@ export default function DraftDashboard() {
 
   const loadDraftDetails = async () => {
     try {
-      // Não ativamos o loading global aqui para não piscar a tela ao atualizar abas secundárias
       const res = await api.get(`/mobile/writer/drafts/${draftId}`);
       setDraft(res.data);
     } catch (error) {
@@ -37,7 +40,6 @@ export default function DraftDashboard() {
 
   useFocusEffect(
     useCallback(() => {
-      // Loading inicial apenas na primeira montagem ou foco
       if (!draft) setLoading(true);
       loadDraftDetails();
     }, [draftId])
@@ -52,6 +54,32 @@ export default function DraftDashboard() {
     }
   };
 
+  // --- LÓGICA DE DELETAR RASCUNHO (Agora funciona com o Backend corrigido) ---
+  const handleDeleteDraft = () => {
+    Alert.alert(
+        "Excluir Projeto",
+        "Tem certeza? Isso apagará todos os capítulos, personagens e lore permanentemente.",
+        [
+            { text: "Cancelar", style: "cancel" },
+            { 
+                text: "Excluir", 
+                style: "destructive", 
+                onPress: async () => {
+                    try {
+                        setLoading(true);
+                        await api.delete(`/mobile/writer/drafts/${draftId}`);
+                        router.replace('/writer'); // Volta para a lista
+                    } catch (error) {
+                        Alert.alert("Erro", "Não foi possível excluir.");
+                        setLoading(false);
+                    }
+                }
+            }
+        ]
+    );
+  };
+
+  // --- LÓGICA DE EXPORTAÇÃO E SUBSTITUIÇÃO ---
   const handleExport = () => {
     if (!draft.chapters || draft.chapters.length === 0) {
       return Alert.alert("Livro Vazio", "Escreva pelo menos um capítulo antes de publicar.");
@@ -59,15 +87,13 @@ export default function DraftDashboard() {
 
     Alert.alert(
       "Publicar & Exportar",
-      `Deseja transformar este rascunho num livro real?\n\nCusto: 25 Créditos\nSaldo Atual: ${user?.credits} CR`,
+      `Gerar versão final (EPUB)?\nCusto: 25 Créditos\nSaldo: ${user?.credits} CR`,
       [
         { text: "Cancelar", style: "cancel" },
         { 
-          text: "Confirmar (-25 CR)", 
+          text: "Confirmar", 
           onPress: async () => {
-            if ((user?.credits || 0) < 25) {
-                return Alert.alert("Erro", "Saldo insuficiente.");
-            }
+            if ((user?.credits || 0) < 25) return Alert.alert("Erro", "Saldo insuficiente.");
 
             try {
               setExporting(true);
@@ -75,16 +101,49 @@ export default function DraftDashboard() {
               
               if (user) updateUser({ ...user, credits: user.credits - 25 });
 
-              const actionText = res.data.action === 'updated' ? 'atualizado' : 'gerado';
+              const { bookId, action } = res.data;
 
-              Alert.alert(
-                "Sucesso! 🎉", 
-                `O seu livro foi ${actionText} e adicionado à sua biblioteca.`,
-                [
-                  { text: "Abrir Biblioteca", onPress: () => router.push('/dashboard/library') },
-                  { text: "Ler Agora", onPress: () => router.push(`/read/${res.data.bookId}`) }
-                ]
-              );
+              // Lógica de Substituição
+              if (action === 'updated') {
+                  Alert.alert(
+                      "Nova Versão Criada",
+                      "Você já possui este livro na biblioteca. Deseja substituir a versão antiga pela nova agora?",
+                      [
+                          { text: "Não, manter antiga", style: "cancel" },
+                          { 
+                              text: "Sim, Substituir", 
+                              onPress: async () => {
+                                  // 1. Apaga arquivo local
+                                  const localUri = `${FileSystem.documentDirectory}${bookId}.epub`;
+                                  await FileSystem.deleteAsync(localUri, { idempotent: true });
+                                  
+                                  // 2. Limpa cache de download (opcional, dependendo de como você implementou no useReader)
+                                  // await AsyncStorage.removeItem(`@book_download_date:${bookId}`);
+
+                                  // 3. Força refresh da store
+                                  try {
+                                      const newBooks = await api.get('/mobile/books');
+                                      setBooks(newBooks.data);
+                                  } catch (e) {}
+
+                                  Alert.alert("Sucesso", "Livro atualizado! Abra-o para ler a nova versão.", [
+                                      { text: "Ler Agora", onPress: () => router.push(`/read/${bookId}`) }
+                                  ]);
+                              } 
+                          }
+                      ]
+                  );
+              } else {
+                  // Novo livro
+                  Alert.alert(
+                    "Sucesso! 🎉", 
+                    "Livro publicado e adicionado à biblioteca.",
+                    [
+                      { text: "Ler Agora", onPress: () => router.push(`/read/${bookId}`) }
+                    ]
+                  );
+              }
+
             } catch (error: any) {
               const msg = error.response?.data?.error || "Falha na exportação.";
               Alert.alert("Erro", msg);
@@ -107,9 +166,15 @@ export default function DraftDashboard() {
       <View className="h-72 relative">
         <LinearGradient colors={['#312e81', '#1e1b4b', '#000']} className="absolute inset-0" />
         <View className="absolute bottom-0 w-full p-6 pb-6">
-            <TouchableOpacity onPress={() => router.back()} className="mb-4 bg-black/20 self-start p-2 rounded-full">
-                <Feather color="white" size={20} />
-            </TouchableOpacity>
+            <View className="flex-row justify-between items-start mb-4">
+                <TouchableOpacity onPress={() => router.back()} className="bg-black/20 p-2 rounded-full">
+                    <Feather color="white" size={20} />
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={handleDeleteDraft} className="bg-red-500/20 p-2 rounded-full border border-red-500/30">
+                    <Trash2 color="#f87171" size={18} />
+                </TouchableOpacity>
+            </View>
             
             <Text className="text-indigo-300 font-bold text-xs uppercase tracking-widest mb-1">
                 {draft.genre || 'Rascunho'} • {draft.status}
@@ -119,7 +184,6 @@ export default function DraftDashboard() {
             </Text>
             
             <View className="flex-row space-x-3 gap-3">
-                {/* BOTÃO CONFIGURAÇÕES */}
                 <TouchableOpacity 
                     onPress={() => setSettingsVisible(true)}
                     className="flex-row items-center bg-indigo-500/20 px-4 py-2 rounded-xl border border-indigo-500/30"
@@ -128,7 +192,6 @@ export default function DraftDashboard() {
                     <Text className="text-indigo-200 text-xs font-bold ml-2">Configurar</Text>
                 </TouchableOpacity>
                 
-                {/* BOTÃO EXPORTAR */}
                 <TouchableOpacity 
                   onPress={handleExport}
                   disabled={exporting}
@@ -139,7 +202,7 @@ export default function DraftDashboard() {
                     ) : (
                       <>
                         <Download size={14} color="#34d399" />
-                        <Text className="text-emerald-400 text-xs font-bold ml-2">Publicar (25 CR)</Text>
+                        <Text className="text-emerald-400 text-xs font-bold ml-2">Publicar</Text>
                       </>
                     )}
                 </TouchableOpacity>
@@ -147,7 +210,7 @@ export default function DraftDashboard() {
         </View>
       </View>
 
-      {/* TABS NAVEGAÇÃO */}
+      {/* TABS */}
       <View className="flex-row px-6 border-b border-zinc-800 mb-4">
         {[
             { key: 'chapters', label: 'Capítulos', icon: FileText },
@@ -167,10 +230,9 @@ export default function DraftDashboard() {
         ))}
       </View>
 
-      {/* CONTEÚDO DA TAB */}
+      {/* CONTEÚDO */}
       <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
         
-        {/* ABA CAPÍTULOS */}
         {activeTab === 'chapters' && (
             <View>
                 <TouchableOpacity 
@@ -210,7 +272,6 @@ export default function DraftDashboard() {
             </View>
         )}
 
-        {/* ABA PERSONAGENS */}
         {activeTab === 'characters' && (
             <CharactersTab 
                 draftId={draftId as string} 
@@ -219,7 +280,6 @@ export default function DraftDashboard() {
             />
         )}
 
-        {/* ABA LORE */}
         {activeTab === 'lore' && (
             <LoreTab 
                 draftId={draftId as string} 
@@ -230,7 +290,6 @@ export default function DraftDashboard() {
 
       </ScrollView>
 
-      {/* MODAL DE CONFIGURAÇÕES */}
       <DraftSettingsModal 
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}

@@ -15,7 +15,7 @@ export const THEMES = {
     sepia: { name: 'Sépia', bg: '#f6f1d1', text: '#5f4b32', ui: 'light' }
 };
 
-// Script para forçar a geração de paginação e corrigir o "0%"
+// Script para paginação e comunicação
 const LOCATION_GENERATION_SCRIPT = `
     if (window.book) {
         window.book.ready.then(() => {
@@ -54,21 +54,16 @@ export function useReader(rawBookId: string | string[]) {
     const router = useRouter();
     const navigation = useNavigation();
     
-    // Zustand Store
     const { books, setBooks, setLastRead, updateProgress: updateGlobalProgress } = useReadingStore();
 
     const webviewRef = useRef<WebView>(null);
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    
-    // --- CORREÇÃO: Adicionando a declaração que faltava ---
     const navigatingRef = useRef(false);
     
-    // Ref para salvar o último progresso conhecido (para o unmount)
     const latestProgressRef = useRef<{ cfi: string, pct: number } | null>(null);
 
     const bookId = Array.isArray(rawBookId) ? rawBookId[0] : rawBookId;
 
-    // Estados
     const [isLoading, setIsLoading] = useState(true);
     const [bookBase64, setBookBase64] = useState<string | null>(null);
     const [initialLocation, setInitialLocation] = useState<string | null>(null);
@@ -88,17 +83,12 @@ export function useReader(rawBookId: string | string[]) {
     const [currentTheme, setCurrentTheme] = useState<'dark' | 'light' | 'sepia'>('dark');
     const [selection, setSelection] = useState<{ cfiRange: string; text: string } | null>(null);
 
-    // Fullscreen mode
     useEffect(() => {
-        navigation.setOptions({
-            tabBarStyle: { display: 'none' },
-            headerShown: false,
-        });
+        navigation.setOptions({ tabBarStyle: { display: 'none' }, headerShown: false });
     }, [navigation]);
 
     useEffect(() => { fontSizeSv.value = fontSize; }, [fontSize]);
 
-    // Cleanup: Salvar progresso ao sair
     useEffect(() => {
         return () => {
             if (latestProgressRef.current) {
@@ -119,37 +109,62 @@ export function useReader(rawBookId: string | string[]) {
             try {
                 setIsLoading(true);
 
-                // 1. Tenta encontrar metadados do livro (Store -> API)
-                let currentBook = books.find((b: { id: string; }) => b.id === bookId);
+                // 1. Busca metadados atualizados da API (para garantir que temos o 'updatedAt' mais recente)
+                // Isso resolve o problema de stale data quando vem do Writer Studio
+                console.log("[Reader] Buscando metadados atualizados...");
+                const res = await api.get('/mobile/books');
+                let currentBook = null;
 
-                if (!currentBook) {
-                    console.log("[Reader] Livro não encontrado no cache, buscando API...");
-                    const res = await api.get('/mobile/books');
-                    if (res.data) {
-                        setBooks(res.data);
-                        currentBook = res.data.find((b: any) => b.id === bookId);
-                    }
+                if (res.data) {
+                    setBooks(res.data); // Atualiza cache global
+                    currentBook = res.data.find((b: any) => b.id === bookId);
+                } else {
+                    // Fallback para cache se API falhar (offline)
+                    currentBook = books.find((b) => b.id === bookId);
                 }
 
                 if (!currentBook) throw new Error("Livro não encontrado na biblioteca.");
                 setBookMeta(currentBook);
 
-                // 2. Verifica se o arquivo existe localmente, senão baixa
+                // 2. Lógica Inteligente de Cache do Arquivo
                 const localUri = `${FileSystem.documentDirectory}${bookId}.epub`;
                 const fileInfo = await FileSystem.getInfoAsync(localUri);
+                
+                let shouldDownload = !fileInfo.exists;
 
-                if (!fileInfo.exists) {
-                    if (!currentBook.filePath) throw new Error("URL do livro inválida.");
-                    console.log("[Reader] Baixando livro...", currentBook.filePath);
-                    
-                    await FileSystem.downloadAsync(currentBook.filePath, localUri);
+                if (fileInfo.exists) {
+                    // Verifica se a versão do servidor é mais nova que o download local
+                    const lastDownloadStr = await AsyncStorage.getItem(`@book_download_date:${bookId}`);
+                    const lastDownloadTime = lastDownloadStr ? parseInt(lastDownloadStr) : 0;
+                    const serverUpdateTime = new Date(currentBook.updatedAt).getTime();
+
+                    // Se o servidor for mais novo, força re-download
+                    if (serverUpdateTime > lastDownloadTime) {
+                        console.log(`[Reader] Atualização detectada. Local: ${lastDownloadTime}, Server: ${serverUpdateTime}`);
+                        shouldDownload = true;
+                    }
                 }
 
-                // 3. Lê o arquivo como Base64 para injetar na WebView
+                if (shouldDownload) {
+                    if (!currentBook.filePath) throw new Error("URL do livro inválida.");
+                    console.log("[Reader] Baixando/Atualizando livro...", currentBook.filePath);
+                    
+                    // Remove arquivo antigo se existir para evitar corrupção
+                    if (fileInfo.exists) {
+                        await FileSystem.deleteAsync(localUri, { idempotent: true });
+                    }
+
+                    await FileSystem.downloadAsync(currentBook.filePath, localUri);
+                    
+                    // Marca o timestamp deste download
+                    await AsyncStorage.setItem(`@book_download_date:${bookId}`, Date.now().toString());
+                }
+
+                // 3. Leitura e Preparação
                 const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
                 setBookBase64(base64);
 
-                // 4. Carrega Preferências e Destaques
+                // 4. Carrega Preferências
                 const [savedSize, savedTheme, savedCfi, remoteHighlights] = await Promise.all([
                     AsyncStorage.getItem('@reader_fontsize'),
                     AsyncStorage.getItem('@reader_theme'),
@@ -164,7 +179,6 @@ export function useReader(rawBookId: string | string[]) {
                 }
                 if (savedTheme) setCurrentTheme(savedTheme as any);
                 
-                // Prioridade de localização: Local > Remoto > 0
                 if (savedCfi) {
                     setInitialLocation(savedCfi);
                 } else if (currentBook.currentLocation) {
@@ -173,12 +187,12 @@ export function useReader(rawBookId: string | string[]) {
 
                 setHighlights(remoteHighlights);
 
-                // 5. Atualiza "Última Leitura"
                 setLastRead({
                     id: bookId,
                     title: currentBook.title,
+                    author: currentBook.author || 'Autor Desconhecido',
                     progress: currentBook.progress || 0, 
-                    cover: currentBook.coverUrl 
+                    coverUrl: currentBook.coverUrl 
                 });
 
             } catch (error: any) {
@@ -192,7 +206,6 @@ export function useReader(rawBookId: string | string[]) {
         load();
     }, [bookId]);
 
-    // Gestos e Ações
     const changeFontSize = useCallback(async (newValue: number) => {
         const safeValue = Math.max(50, Math.min(250, Math.round(newValue)));
         setFontSize(prev => {
@@ -219,14 +232,9 @@ export function useReader(rawBookId: string | string[]) {
                     if (typeof data.percentage === 'number') { 
                         const pct = data.percentage;
                         setProgress(pct);
-                        
-                        // Atualiza Ref
                         latestProgressRef.current = { cfi: data.cfi, pct };
-
-                        // Atualiza Store Global (UI)
                         updateGlobalProgress(bookId, data.cfi, pct * 100);
 
-                        // Sync API (Debounce)
                         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
                         
                         AsyncStorage.setItem(`@progress:${bookId}`, data.cfi);
@@ -264,7 +272,7 @@ export function useReader(rawBookId: string | string[]) {
     };
 
     const navDebounce = (fn: () => void) => {
-        if (navigatingRef.current) return;
+        if (navigatingRef.current) return; 
         navigatingRef.current = true;
         fn();
         setTimeout(() => { navigatingRef.current = false; }, 300);
