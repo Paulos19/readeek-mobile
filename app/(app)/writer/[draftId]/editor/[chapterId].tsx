@@ -1,156 +1,167 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  View, TextInput, TouchableOpacity, Text, ActivityIndicator, 
-  Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar 
+  View, TextInput, SafeAreaView, KeyboardAvoidingView, 
+  Platform, ActivityIndicator, Text, TouchableOpacity, StatusBar, Keyboard 
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
-import { api } from '../../../../../lib/api'; // Ajuste o caminho dos imports conforme necessário
-import { Save } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { ChevronLeft, Save, Cloud, CheckCircle2, AlertCircle } from 'lucide-react-native';
+import { api } from '../../../../../lib/api';
+import { EditorToolbar } from './_components/EditorToolbar';
 
-export default function ChapterEditorScreen() {
-  const { chapterId, draftId } = useLocalSearchParams();
+type SaveStatus = 'saved' | 'saving' | 'error' | 'unsaved';
+
+export default function ChapterEditor() {
+  const { chapterId } = useLocalSearchParams();
   const router = useRouter();
   
-  // States
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [wordCount, setWordCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   
-  // Dirty state para avisar se sair sem salvar
-  const [isDirty, setIsDirty] = useState(false);
+  // Controle de Salvamento
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const lastSavedContent = useRef('');
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Controle de Cursor para Formatação
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const contentInputRef = useRef<TextInput>(null);
+
+  // 1. Carregar Dados Iniciais
   useEffect(() => {
     loadChapter();
   }, [chapterId]);
 
-  // Atualiza contador de palavras em tempo real
-  useEffect(() => {
-    const words = content.trim().split(/\s+/).filter(w => w.length > 0).length;
-    setWordCount(words);
-  }, [content]);
-
   const loadChapter = async () => {
     try {
       const res = await api.get(`/mobile/writer/chapters/${chapterId}`);
-      setTitle(res.data.title || '');
+      setTitle(res.data.title);
       setContent(res.data.content || '');
-      setIsDirty(false);
+      lastSavedContent.current = res.data.content || '';
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível carregar o texto.");
-      router.back();
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!title.trim()) return Alert.alert("Atenção", "O capítulo precisa de um título.");
-    
+  // 2. Lógica de Auto-Save (Debounce)
+  useEffect(() => {
+    if (loading) return;
+
+    // Se o conteúdo mudou em relação ao último save
+    if (content !== lastSavedContent.current) {
+      setSaveStatus('unsaved');
+
+      // Limpa timer anterior
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+      // Define novo timer de 2 segundos
+      saveTimeoutRef.current = setTimeout(() => {
+        saveChapter();
+      }, 2000);
+    }
+  }, [content, title]);
+
+  const saveChapter = async () => {
+    setSaveStatus('saving');
     try {
-      setSaving(true);
-      await api.put(`/mobile/writer/chapters/${chapterId}`, {
+      await api.patch(`/mobile/writer/chapters/${chapterId}`, {
         title,
         content
       });
-      setIsDirty(false);
-      // Feedback visual rápido
-      Alert.alert("Salvo", "Alterações guardadas com sucesso.");
+      lastSavedContent.current = content;
+      setSaveStatus('saved');
     } catch (error) {
-      Alert.alert("Erro", "Falha ao salvar. Verifique sua conexão.");
-    } finally {
-      setSaving(false);
+      setSaveStatus('error');
     }
   };
 
-  // Header Personalizado para o Editor
-  const renderHeader = () => (
-    <View className="flex-row justify-between items-center px-4 py-3 bg-zinc-900 border-b border-zinc-800 pt-12">
-      <TouchableOpacity onPress={() => {
-        if (isDirty) {
-          Alert.alert("Alterações não salvas", "Deseja sair e perder o progresso?", [
-            { text: "Ficar", style: "cancel" },
-            { text: "Sair", style: "destructive", onPress: () => router.back() }
-          ]);
-        } else {
-          router.back();
-        }
-      }}>
-        <Feather name="arrow-left" color="#a1a1aa" size={24} />
-      </TouchableOpacity>
+  // 3. Lógica de Inserção de Formatação
+  const handleInsertFormat = (prefix: string, suffix: string = '') => {
+    const start = selection.start;
+    const end = selection.end;
+    
+    const before = content.substring(0, start);
+    const selected = content.substring(start, end);
+    const after = content.substring(end);
 
-      <Text className="text-zinc-400 text-xs font-bold uppercase tracking-widest">
-        {saving ? "Salvando..." : `${wordCount} palavras`}
-      </Text>
+    const newText = `${before}${prefix}${selected}${suffix}${after}`;
+    setContent(newText);
 
-      <TouchableOpacity 
-        onPress={handleSave} 
-        disabled={saving}
-        className={`flex-row items-center px-4 py-2 rounded-full ${isDirty ? 'bg-indigo-600' : 'bg-zinc-800'}`}
-      >
-        {saving ? (
-          <ActivityIndicator color="white" size="small" />
-        ) : (
-          <>
-            <Save size={16} color={isDirty ? "white" : "#71717a"} style={{ marginRight: 6 }} />
-            <Text className={`font-bold text-xs ${isDirty ? 'text-white' : 'text-zinc-500'}`}>
-              Salvar
-            </Text>
-          </>
-        )}
-      </TouchableOpacity>
-    </View>
-  );
+    // Tenta reposicionar o cursor (UX melhorada)
+    // Pequeno delay para o React atualizar o state
+    setTimeout(() => {
+        const newCursorPos = start + prefix.length + selected.length + suffix.length;
+        contentInputRef.current?.focus();
+        // Nota: setSelection programático no Android pode ser instável em algumas versões do RN
+    }, 100);
+  };
 
-  if (loading) return (
-    <View className="flex-1 bg-black items-center justify-center">
-      <ActivityIndicator color="#6366f1" size="large" />
-    </View>
-  );
+  // Renderizador do Status de Save
+  const renderStatus = () => {
+    switch (saveStatus) {
+      case 'saving': return <ActivityIndicator size="small" color="#818cf8" />;
+      case 'saved': return <CheckCircle2 size={18} color="#34d399" />;
+      case 'error': return <AlertCircle size={18} color="#f87171" />;
+      default: return <Cloud size={18} color="#71717a" />;
+    }
+  };
+
+  if (loading) return <View className="flex-1 bg-black justify-center items-center"><ActivityIndicator color="#6366f1" /></View>;
 
   return (
-    <View className="flex-1 bg-black">
+    <SafeAreaView className="flex-1 bg-black">
       <StatusBar barStyle="light-content" />
-      <Stack.Screen options={{ headerShown: false }} />
       
-      {renderHeader()}
+      {/* HEADER DE EDIÇÃO */}
+      <View className="px-4 py-3 border-b border-zinc-900 flex-row justify-between items-center bg-black z-10">
+        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+            <ChevronLeft color="white" size={24} />
+        </TouchableOpacity>
 
+        <View className="flex-1 mx-4">
+            <TextInput 
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Título do Capítulo"
+                placeholderTextColor="#52525b"
+                className="text-white font-bold text-center text-lg"
+            />
+        </View>
+
+        <View className="flex-row items-center gap-2">
+            <Text className="text-zinc-600 text-[10px] uppercase font-bold">
+                {saveStatus === 'saving' ? 'Salvando...' : saveStatus === 'saved' ? 'Salvo' : saveStatus === 'unsaved' ? 'Editando...' : 'Erro'}
+            </Text>
+            {renderStatus()}
+        </View>
+      </View>
+
+      {/* ÁREA DE TEXTO */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-        className="flex-1"
+        style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <ScrollView 
-          className="flex-1 px-6 pt-6"
-          contentContainerStyle={{ paddingBottom: 100 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Título do Capítulo */}
-          <TextInput
-            value={title}
-            onChangeText={(t) => { setTitle(t); setIsDirty(true); }}
-            placeholder="Título do Capítulo"
-            placeholderTextColor="#52525b"
-            className="text-2xl font-black text-white mb-6 border-b border-zinc-800 pb-4"
-            multiline={false}
-          />
-
-          {/* Área de Escrita */}
-          <TextInput
+        <TextInput
+            ref={contentInputRef}
             value={content}
-            onChangeText={(t) => { setContent(t); setIsDirty(true); }}
-            placeholder="Comece a escrever sua história aqui..."
-            placeholderTextColor="#3f3f46"
-            className="text-lg text-zinc-300 leading-8 font-medium min-h-[500px]"
+            onChangeText={setContent}
             multiline
+            placeholder="Comece a escrever sua história... Use Markdown para formatar."
+            placeholderTextColor="#3f3f46"
+            className="flex-1 text-zinc-300 text-lg px-6 pt-6 leading-8 font-normal"
             textAlignVertical="top"
-            scrollEnabled={false} // Deixa o ScrollView pai controlar a rolagem
-            autoCorrect={false} // Opcional: desativar corretor para escrita criativa
-          />
-        </ScrollView>
+            style={{ fontSize: 18 }}
+            onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+            autoCapitalize="sentences"
+            keyboardAppearance="dark"
+        />
+
+        {/* TOOLBAR (Acima do teclado) */}
+        <EditorToolbar onInsert={handleInsertFormat} />
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
