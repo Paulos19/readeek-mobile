@@ -1,25 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Image, ImageBackground, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Bell, Search, ChevronRight, BookOpen, Play, ShoppingCart } from 'lucide-react-native';
+import { Bell, Search, ChevronRight, BookOpen, Play, ShoppingCart, Sparkles } from 'lucide-react-native';
 import Animated, { 
   FadeInDown, 
-  FadeInRight, 
+  FadeInUp,
   useSharedValue, 
   useAnimatedStyle, 
   withSpring, 
   withSequence, 
   withTiming, 
   withDelay,
-  ZoomIn,
+  withRepeat,
   interpolate,
-  Extrapolation
+  Extrapolation,
+  Easing
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { User } from '../_types/user';
-import { api, Notification } from '../../../lib/api'; // Ajustado para usar api direta
+import { api, Notification } from '../../../lib/api';
 
 // Modais
 import { NotificationsSheet } from './NotificationsSheet';
@@ -39,75 +40,79 @@ interface GreetingHeaderProps {
   onContinueReading: (book: MinimalBook) => void;
 }
 
+const { width } = Dimensions.get('window');
+
 // --- BADGE INTELIGENTE ---
 const SmartBadge = () => {
     const progress = useSharedValue(0);
     const shake = useSharedValue(0);
 
     useEffect(() => {
-        progress.value = withDelay(3000, withSpring(1, { damping: 15 }));
+        progress.value = withDelay(2000, withSpring(1, { damping: 12 }));
         const interval = setInterval(() => {
             shake.value = withSequence(
-                withTiming(-15, { duration: 50 }),
-                withTiming(15, { duration: 50 }),
-                withTiming(-15, { duration: 50 }),
-                withTiming(15, { duration: 50 }),
+                withTiming(-10, { duration: 50 }),
+                withTiming(10, { duration: 50 }),
+                withTiming(-10, { duration: 50 }),
+                withTiming(10, { duration: 50 }),
                 withTiming(0, { duration: 50 })
             );
-        }, 5000);
+        }, 6000);
         return () => clearInterval(interval);
     }, []);
 
     const containerStyle = useAnimatedStyle(() => {
-        const width = interpolate(progress.value, [0, 1], [36, 8]); 
-        const height = interpolate(progress.value, [0, 1], [16, 8]);
-        const top = interpolate(progress.value, [0, 1], [-10, -2]); 
-        const right = interpolate(progress.value, [0, 1], [-10, -2]);
-
-        return { width, height, top, right, transform: [{ rotate: `${shake.value}deg` }] };
+        const size = interpolate(progress.value, [0, 1], [18, 8]);
+        const top = interpolate(progress.value, [0, 1], [-5, 0]);
+        const right = interpolate(progress.value, [0, 1], [-5, 0]);
+        return { width: size, height: size, top, right, transform: [{ rotate: `${shake.value}deg` }] };
     });
-
-    const textStyle = useAnimatedStyle(() => ({
-        opacity: interpolate(progress.value, [0, 0.6], [1, 0], Extrapolation.CLAMP),
-        transform: [{ scale: interpolate(progress.value, [0, 1], [1, 0]) }]
-    }));
 
     return (
         <Animated.View style={[containerStyle, { position: 'absolute', zIndex: 20, borderRadius: 999, overflow: 'hidden' }]}>
-            <LinearGradient
-                colors={['#ec4899', '#8b5cf6']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
-            >
-                <Animated.Text style={[textStyle, { fontSize: 8, fontWeight: '900', color: 'white' }]}>NOVO</Animated.Text>
-            </LinearGradient>
+            <LinearGradient colors={['#f472b6', '#a78bfa']} style={{ width: '100%', height: '100%' }} />
+        </Animated.View>
+    );
+};
+
+// --- EFEITO DE BRILHO (PARTÍCULAS) ---
+const MagicSparkle = ({ delay = 0, style }: any) => {
+    const opacity = useSharedValue(0);
+    const scale = useSharedValue(0.5);
+
+    useEffect(() => {
+        opacity.value = withDelay(delay, withRepeat(withSequence(
+            withTiming(1, { duration: 1000 }),
+            withTiming(0, { duration: 1000 })
+        ), -1, true));
+        
+        scale.value = withDelay(delay, withRepeat(withSequence(
+            withTiming(1.2, { duration: 2000 }),
+            withTiming(0.5, { duration: 2000 })
+        ), -1, true));
+    }, []);
+
+    const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+
+    return (
+        <Animated.View style={[style, animStyle, { position: 'absolute' }]}>
+            <Sparkles size={12} color="#fbbf24" fill="#fbbf24" />
         </Animated.View>
     );
 };
 
 // --- ÍCONE GENÉRICO ---
-const IconButton = ({ icon: Icon, onPress, badgeCount = 0, showSmartBadge = false }: any) => {
-  const scale = useSharedValue(1);
-  const handlePressIn = () => { scale.value = withSpring(0.9); };
-  const handlePressOut = () => { scale.value = withSpring(1); onPress(); };
-  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  return (
-    <Animated.View style={animatedStyle}>
-      <TouchableOpacity
-        onPressIn={handlePressIn} onPressOut={handlePressOut}
-        activeOpacity={1}
-        className="w-10 h-10 rounded-full bg-zinc-900/80 border border-zinc-800 items-center justify-center relative backdrop-blur-md"
-      >
-        <Icon size={20} color={badgeCount > 0 || showSmartBadge ? "white" : "#a1a1aa"} />
-        {badgeCount > 0 && !showSmartBadge && (
-          <View className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-zinc-900 z-10" />
-        )}
-        {showSmartBadge && <SmartBadge />}
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
+const IconButton = ({ icon: Icon, onPress, badgeCount = 0, showSmartBadge = false }: any) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.7}
+    className="w-10 h-10 rounded-full bg-zinc-900/60 border border-zinc-700/50 items-center justify-center relative backdrop-blur-md"
+  >
+    <Icon size={18} color={badgeCount > 0 || showSmartBadge ? "white" : "#a1a1aa"} />
+    {badgeCount > 0 && !showSmartBadge && <View className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-zinc-900" />}
+    {showSmartBadge && <SmartBadge />}
+  </TouchableOpacity>
+);
 
 export function GreetingHeader({ user, lastReadBook, onContinueReading }: GreetingHeaderProps) {
   const router = useRouter();
@@ -143,12 +148,9 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
           const res = await api.get('/mobile/marketplace/status');
           const latestProductDateStr = res.data?.lastProductDate;
           if (!latestProductDateStr) return;
-
-          const latestProductDate = new Date(latestProductDateStr).getTime();
           const lastVisitStr = await AsyncStorage.getItem('@last_shop_visit');
           const lastVisitDate = lastVisitStr ? parseInt(lastVisitStr) : 0;
-
-          if (latestProductDate > lastVisitDate) setHasNewProducts(true);
+          if (new Date(latestProductDateStr).getTime() > lastVisitDate) setHasNewProducts(true);
       } catch (e) {}
   };
 
@@ -171,7 +173,9 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
   };
 
   return (
-    <View className="px-6 pt-2 pb-2 mb-2 z-50">
+    <View className="px-5 pt-2 pb-6 mb-4 z-50">
+      
+      {/* MODAIS */}
       <NotificationsSheet 
         visible={showNotifications}
         notifications={notifications}
@@ -179,87 +183,120 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
         onMarkAsRead={handleMarkAsRead}
         topOffset={120} 
       />
+      <SearchSheet visible={showSearch} onClose={() => setShowSearch(false)} topOffset={120} />
 
-      <SearchSheet 
-        visible={showSearch}
-        onClose={() => setShowSearch(false)}
-        topOffset={120}
-      />
-
-      {/* --- HEADER --- */}
-      <View className="flex-row items-center justify-between mb-8 mt-2">
+      {/* --- HEADER SUPERIOR (Compacto) --- */}
+      <View className="flex-row items-center justify-between mb-6 mt-2">
         <Animated.View entering={FadeInDown.duration(600)} className="flex-row items-center gap-3 flex-1">
           <TouchableOpacity onPress={() => router.push(`/(app)/profile/${user?.id}` as any)}>
-            <View className="p-0.5 rounded-full border-2 border-emerald-500/30">
+            <View className="w-10 h-10 rounded-full border border-zinc-700 overflow-hidden">
                 <Image 
-                    source={{ uri: user?.image || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=10b981&color=fff` }} 
-                    className="w-12 h-12 rounded-full bg-zinc-800"
+                    source={{ uri: user?.image || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=18181b&color=fff` }} 
+                    className="w-full h-full"
                 />
             </View>
           </TouchableOpacity>
           <View>
-            <Text className="text-zinc-400 text-xs font-medium uppercase tracking-wide">{greeting},</Text>
-            <Text className="text-white text-xl font-bold leading-6" numberOfLines={1}>
-                {user?.name?.split(' ')[0] || 'Leitor'}
-            </Text>
+            <Text className="text-zinc-400 text-[10px] uppercase font-bold tracking-widest">{greeting}</Text>
+            <Text className="text-white text-lg font-bold leading-5" numberOfLines={1}>{user?.name?.split(' ')[0]}</Text>
           </View>
         </Animated.View>
 
-        <View className="flex-row items-center gap-3">
+        <View className="flex-row items-center gap-2">
             <IconButton icon={Search} onPress={() => setShowSearch(true)} />
             <IconButton icon={ShoppingCart} showSmartBadge={hasNewProducts} onPress={handleOpenShop} />
             <IconButton icon={Bell} badgeCount={unreadCount} onPress={() => setShowNotifications(true)} />
         </View>
       </View>
 
-      {/* --- SESSÃO CONTINUAR LENDO --- */}
+      {/* --- CARD "LENDO AGORA" MÁGICO --- */}
       {lastReadBook ? (
-        <Animated.View entering={FadeInRight.delay(300).springify()} className="w-full">
+        <Animated.View entering={FadeInUp.delay(300).springify()} className="w-full">
             <TouchableOpacity 
-                activeOpacity={0.9}
+                activeOpacity={0.95}
                 onPress={() => onContinueReading(lastReadBook)}
-                className="overflow-hidden rounded-3xl relative min-h-[140px]"
+                className="overflow-hidden rounded-[28px] relative bg-zinc-900 border border-zinc-800/50 shadow-2xl shadow-black/80"
+                style={{ height: 220 }}
             >
-                <LinearGradient
-                    colors={['#18181b', '#09090b']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    className="absolute inset-0 rounded-3xl border border-zinc-800"
-                />
-                <View className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl" />
+                {/* 1. Imagem de Fundo (Blur/Atmosfera) */}
+                {lastReadBook.coverUrl ? (
+                    <ImageBackground 
+                        source={{ uri: lastReadBook.coverUrl }} 
+                        className="absolute inset-0 w-full h-full opacity-60 blur-3xl"
+                        resizeMode="cover"
+                    />
+                ) : (
+                    <LinearGradient
+                        colors={['#18181b', '#27272a']}
+                        className="absolute inset-0 w-full h-full"
+                    />
+                )}
 
-                <View className="flex-row p-4 items-center">
-                    <Animated.View entering={ZoomIn.delay(500)} className="shadow-xl shadow-black">
+                {/* 2. Overlay Gradiente para legibilidade */}
+                <LinearGradient
+                    colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)', '#09090b']}
+                    locations={[0, 0.5, 1]}
+                    className="absolute inset-0"
+                />
+
+                {/* 3. Partículas Mágicas */}
+                <MagicSparkle delay={0} style={{ top: 20, right: 40 }} />
+                <MagicSparkle delay={1000} style={{ bottom: 60, left: 30 }} />
+
+                <View className="flex-1 flex-row p-6 items-center">
+                    
+                    {/* Capa do Livro (Floating 3D) */}
+                    <Animated.View 
+                        entering={FadeInUp.delay(500)} 
+                        className="shadow-2xl shadow-black"
+                        style={{ transform: [{ rotate: '-3deg' }] }}
+                    >
                         {lastReadBook.coverUrl ? (
-                            <Image source={{ uri: lastReadBook.coverUrl }} className="w-20 h-28 rounded-lg bg-zinc-800" resizeMode="cover" />
+                            <Image 
+                                source={{ uri: lastReadBook.coverUrl }} 
+                                className="w-28 h-40 rounded-lg border-2 border-white/10" 
+                                resizeMode="cover"
+                            />
                         ) : (
-                            <View className="w-20 h-28 rounded-lg bg-zinc-800 items-center justify-center border border-zinc-700">
-                                <BookOpen size={24} color="#52525b" />
+                            <View className="w-28 h-40 rounded-lg bg-zinc-800 items-center justify-center border-2 border-zinc-700">
+                                <BookOpen size={32} color="#52525b" />
                             </View>
                         )}
                     </Animated.View>
 
-                    <View className="flex-1 ml-4 justify-between h-24 py-1">
+                    {/* Informações */}
+                    <View className="flex-1 ml-5 justify-center h-full">
                         <View>
-                            <View className="flex-row items-center mb-1">
-                                <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2 animate-pulse" />
-                                <Text className="text-emerald-500 text-[10px] font-bold uppercase tracking-widest">Em andamento</Text>
+                            <View className="bg-white/10 self-start px-2 py-0.5 rounded-md mb-2 backdrop-blur-md border border-white/5">
+                                <Text className="text-white/90 text-[9px] font-black uppercase tracking-widest">Lendo Agora</Text>
                             </View>
-                            <Text className="text-white font-bold text-lg leading-tight" numberOfLines={2}>{lastReadBook.title}</Text>
-                            <Text className="text-zinc-500 text-xs mt-0.5" numberOfLines={1}>{lastReadBook.author || 'Autor desconhecido'}</Text>
+                            
+                            <Text className="text-white font-black text-xl leading-6 mb-1 shadow-black shadow-lg" numberOfLines={2}>
+                                {lastReadBook.title}
+                            </Text>
+                            <Text className="text-zinc-400 text-xs font-medium mb-4" numberOfLines={1}>
+                                {lastReadBook.author || 'Autor desconhecido'}
+                            </Text>
                         </View>
 
-                        <View className="flex-row items-center gap-3 mt-2">
-                            <View className="flex-1">
-                                <View className="flex-row justify-between mb-1.5">
-                                    <Text className="text-zinc-400 text-[10px] font-medium">Progresso</Text>
-                                    <Text className="text-white text-[10px] font-bold">{Math.round(lastReadBook.progress || 0)}%</Text>
-                                </View>
-                                <View className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                                    <View className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(lastReadBook.progress || 0, 100)}%` }} />
-                                </View>
+                        {/* Barra de Progresso e Botão */}
+                        <View>
+                            <View className="flex-row justify-between mb-1.5 items-end">
+                                <Text className="text-zinc-400 text-[10px] font-bold uppercase">Progresso</Text>
+                                <Text className="text-emerald-400 text-xs font-black">{Math.round(lastReadBook.progress || 0)}%</Text>
                             </View>
-                            <View className="w-8 h-8 rounded-full bg-white items-center justify-center shadow-lg">
-                                <Play size={14} color="black" style={{ marginLeft: 2 }} fill="black" />
+                            <View className="h-1.5 bg-white/10 rounded-full overflow-hidden mb-4">
+                                <View 
+                                    className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.6)]" 
+                                    style={{ width: `${Math.min(lastReadBook.progress || 0, 100)}%` }} 
+                                />
+                            </View>
+
+                            <View className="flex-row items-center gap-2">
+                                <View className="w-8 h-8 bg-white rounded-full items-center justify-center shadow-lg shadow-white/20">
+                                    <Play size={14} color="black" fill="black" style={{ marginLeft: 2 }} />
+                                </View>
+                                <Text className="text-white font-bold text-xs uppercase tracking-wide">Continuar</Text>
                             </View>
                         </View>
                     </View>
@@ -267,17 +304,21 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
             </TouchableOpacity>
         </Animated.View>
       ) : (
-        <Animated.View entering={FadeInDown.delay(300)} className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex-row items-center justify-between">
-            <View className="flex-row items-center gap-3">
-                <View className="w-10 h-10 rounded-full bg-zinc-800 items-center justify-center">
-                    <BookOpen size={20} color="#71717a" />
+        <Animated.View entering={FadeInDown.delay(300)}>
+            <TouchableOpacity className="bg-zinc-900 border border-zinc-800 rounded-[24px] p-6 flex-row items-center justify-between shadow-lg">
+                <View className="flex-row items-center gap-4">
+                    <View className="w-12 h-12 rounded-2xl bg-zinc-800 items-center justify-center border border-zinc-700">
+                        <BookOpen size={24} color="#71717a" />
+                    </View>
+                    <View>
+                        <Text className="text-white font-bold text-lg">Sem leitura ativa</Text>
+                        <Text className="text-zinc-500 text-xs mt-0.5">Explore a biblioteca para começar.</Text>
+                    </View>
                 </View>
-                <View>
-                    <Text className="text-white font-bold">Comece uma nova leitura</Text>
-                    <Text className="text-zinc-500 text-xs">Explore a biblioteca</Text>
+                <View className="w-8 h-8 rounded-full bg-zinc-800 items-center justify-center border border-zinc-700">
+                    <ChevronRight size={16} color="#a1a1aa" />
                 </View>
-            </View>
-            <ChevronRight size={20} color="#52525b" />
+            </TouchableOpacity>
         </Animated.View>
       )}
     </View>

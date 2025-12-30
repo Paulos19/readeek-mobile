@@ -8,7 +8,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { 
   LogOut, Settings, ChevronRight, Shield, X, 
   Camera, Book, Users, LayoutGrid, 
-  KeyRound, MessageSquare, Edit3, Search, Wifi
+  KeyRound, MessageSquare, Edit3, Search, Wifi,
+  PenTool, ShoppingBag, MessageCircle
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -97,10 +98,55 @@ const ListModal = React.memo(({
 });
 
 /**
+ * QuickAccessBar: Atalhos para funcionalidades principais (NOVO)
+ */
+const QuickAccessBar = React.memo(({ onNavigate }: { onNavigate: (path: string) => void }) => (
+  <View className="px-6 mb-8">
+    <Text className="text-zinc-500 font-black text-[10px] uppercase tracking-widest mb-3 ml-1">Acesso Rápido</Text>
+    <View className="flex-row justify-between gap-3">
+        
+        {/* Writer Studio */}
+        <TouchableOpacity 
+            onPress={() => onNavigate('/writer')}
+            className="flex-1 bg-zinc-900 border border-zinc-800 p-4 rounded-[20px] items-center active:bg-zinc-800"
+        >
+            <View className="w-10 h-10 rounded-full bg-indigo-500/10 items-center justify-center mb-2 border border-indigo-500/20">
+                <PenTool size={18} color="#818cf8" />
+            </View>
+            <Text className="text-white font-bold text-xs">Escrever</Text>
+        </TouchableOpacity>
+
+        {/* Marketplace */}
+        <TouchableOpacity 
+            onPress={() => onNavigate('/shop')}
+            className="flex-1 bg-zinc-900 border border-zinc-800 p-4 rounded-[20px] items-center active:bg-zinc-800"
+        >
+            <View className="w-10 h-10 rounded-full bg-amber-500/10 items-center justify-center mb-2 border border-amber-500/20">
+                <ShoppingBag size={18} color="#fbbf24" />
+            </View>
+            <Text className="text-white font-bold text-xs">Loja</Text>
+        </TouchableOpacity>
+
+        {/* Chat */}
+        <TouchableOpacity 
+            onPress={() => onNavigate('/chat')}
+            className="flex-1 bg-zinc-900 border border-zinc-800 p-4 rounded-[20px] items-center active:bg-zinc-800"
+        >
+            <View className="w-10 h-10 rounded-full bg-emerald-500/10 items-center justify-center mb-2 border border-emerald-500/20">
+                <MessageCircle size={18} color="#34d399" />
+            </View>
+            <Text className="text-white font-bold text-xs">Mensagens</Text>
+        </TouchableOpacity>
+
+    </View>
+  </View>
+));
+
+/**
  * PremiumCreditCard: Design estilo "Infinite Black".
  */
 const PremiumCreditCard = React.memo(({ credits, onPress }: { credits: number, onPress: () => void }) => (
-  <TouchableOpacity activeOpacity={0.95} onPress={onPress} className="px-6 mb-10">
+  <TouchableOpacity activeOpacity={0.95} onPress={onPress} className="px-6 mb-8">
     <LinearGradient
       colors={['#18181b', '#09090b', '#000000']}
       start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -462,6 +508,9 @@ export default function ProfileScreen() {
             credits={stats?.credits || 0} 
             onPress={() => router.push('/shop')} 
         />
+
+        {/* QUICK ACCESS BAR (NOVO) */}
+        <QuickAccessBar onNavigate={(path) => router.push(path as any)} />
 
         {/* TABS CONTROL */}
         <View className="px-6 mb-6">
