@@ -19,6 +19,11 @@ const createHTML = (initialContent: string) => {
     <html>
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Courier+Prime&family=Crimson+Text:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,300;0,700;1,300&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
         <style>
             html, body { height: 100%; margin: 0; padding: 0; }
             
@@ -27,13 +32,20 @@ const createHTML = (initialContent: string) => {
             .theme-light { --text: #18181b; --ph: #a1a1aa; --border: #e4e4e7; }
             .theme-sepia { --text: #433422; --ph: #9c8ba9; --border: #eaddc5; }
 
+            :root {
+                --font: 'Merriweather', serif; /* Valor padrão */
+            }
+
             body { 
                 background-color: transparent; 
                 color: var(--text); 
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                
+                /* USO DA FONTE DINÂMICA */
+                font-family: var(--font); 
+                
                 padding: 20px; padding-bottom: 80px;
                 font-size: 18px; line-height: 1.6;
-                transition: color 0.3s ease;
+                transition: color 0.3s ease, font-family 0.3s ease;
             }
             
             /* Ajuste para Wallpaper */
@@ -263,6 +275,11 @@ const createHTML = (initialContent: string) => {
                 else document.body.style.color = '';
                 if (data.hasWallpaper) document.body.classList.add('has-wallpaper');
                 else document.body.classList.remove('has-wallpaper');
+                
+                // NOVO: APLICAR FONTE
+                if (data.fontFamily) {
+                    document.documentElement.style.setProperty('--font', data.fontFamily);
+                }
             }
 
             function getSelectionText() {
@@ -322,6 +339,7 @@ export default function ChapterEditor() {
   const [editorTheme, setEditorTheme] = useState<ThemeType>('dark');
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [customTextColor, setCustomTextColor] = useState<string>('');
+  const [fontFamily, setFontFamily] = useState<string>("'Merriweather', serif");
   
   // Upload Imagem
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -341,7 +359,8 @@ export default function ChapterEditor() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const webViewRef = useRef<WebView>(null);
-  const lastSavedRef = useRef({ title: '', content: '', theme: 'dark', color: '', wallpaper: '' });
+  // REF ATUALIZADA PARA AUTOSAVE (incluindo font)
+  const lastSavedRef = useRef({ title: '', content: '', theme: 'dark', color: '', wallpaper: '', font: "'Merriweather', serif" });
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. CARREGAR DADOS
@@ -358,9 +377,10 @@ export default function ChapterEditor() {
       if (data.theme) setEditorTheme(data.theme as ThemeType);
       if (data.wallpaperUrl) setBackgroundImage(data.wallpaperUrl);
       if (data.textColor) setCustomTextColor(data.textColor);
+      if (data.fontFamily) setFontFamily(data.fontFamily);
 
       lastSavedRef.current = {
-          title: data.title, content: data.content || '', theme: data.theme || 'dark', color: data.textColor || '', wallpaper: data.wallpaperUrl || ''
+          title: data.title, content: data.content || '', theme: data.theme || 'dark', color: data.textColor || '', wallpaper: data.wallpaperUrl || '', font: data.fontFamily || "'Merriweather', serif"
       };
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
@@ -378,13 +398,14 @@ export default function ChapterEditor() {
     setSaveStatus('saving');
     try {
       const payload = {
-        title, content, theme: editorTheme, textColor: customTextColor, wallpaperUrl: backgroundImage 
+        title, content, theme: editorTheme, textColor: customTextColor, wallpaperUrl: backgroundImage,
+        fontFamily // Enviando fonte
       };
       await api.patch(`/mobile/writer/chapters/${chapterId}`, payload);
-      lastSavedRef.current = { ...lastSavedRef.current, title, content, theme: editorTheme, color: customTextColor };
+      lastSavedRef.current = { ...lastSavedRef.current, title, content, theme: editorTheme, color: customTextColor, font: fontFamily };
       setSaveStatus('saved');
     } catch { setSaveStatus('error'); }
-  }, [title, content, editorTheme, customTextColor, backgroundImage, chapterId]);
+  }, [title, content, editorTheme, customTextColor, backgroundImage, fontFamily, chapterId]);
 
   // 4. UPLOAD IMAGEM
   const pickImage = async () => {
@@ -418,22 +439,23 @@ export default function ChapterEditor() {
   // 5. AUTO-SAVE
   useEffect(() => {
     if (loading || initialContent === null) return;
-    const hasChanges = content !== lastSavedRef.current.content || title !== lastSavedRef.current.title || editorTheme !== lastSavedRef.current.theme || customTextColor !== lastSavedRef.current.color;
+    const hasChanges = content !== lastSavedRef.current.content || title !== lastSavedRef.current.title || editorTheme !== lastSavedRef.current.theme || customTextColor !== lastSavedRef.current.color || fontFamily !== lastSavedRef.current.font;
     if (hasChanges) {
       setSaveStatus('editing');
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(saveTextChanges, 2000);
     }
-  }, [content, title, editorTheme, customTextColor, loading, saveTextChanges]);
+  }, [content, title, editorTheme, customTextColor, fontFamily, loading, saveTextChanges]);
 
   // 6. SINCRONIA VISUAL (CSS)
   useEffect(() => {
     if (!loading && webViewRef.current) {
         webViewRef.current.postMessage(JSON.stringify({
-            command: 'setConfig', theme: editorTheme, textColor: customTextColor, hasWallpaper: !!backgroundImage
+            command: 'setConfig', theme: editorTheme, textColor: customTextColor, hasWallpaper: !!backgroundImage, 
+            fontFamily: fontFamily
         }));
     }
-  }, [editorTheme, customTextColor, backgroundImage, loading]);
+  }, [editorTheme, customTextColor, backgroundImage, fontFamily, loading]);
 
   // 7. HANDLERS WEBVIEW
   const handleWebViewMessage = (event: any) => {
@@ -472,24 +494,37 @@ export default function ChapterEditor() {
       } catch {}
   };
 
-  // BUSCA SUGESTÕES NA IA (Para não pesar o app)
+  // BUSCA SUGESTÕES NA IA (Para não pesar o app) - CORRIGIDO
   const handleDictionaryCheck = async (word: string) => {
-      setMisspelledWord(word);
+      // Limpa a palavra de pontuações (defensivo)
+      const cleanWord = word.trim().replace(/[.,;!?"]+$/, "");
+      
+      setMisspelledWord(cleanWord);
       setDictSuggestions([]);
       setDictModalVisible(true);
       setLoadingSuggestions(true);
 
       try {
-          // Usa API Gemini para sugestões pontuais
+          // ENVIA MODO LOOKUP PARA O BACKEND
           const res = await api.post('/mobile/writer/ai/fix', { 
-              text: `Sugira 3 correções ou sinônimos para a palavra "${word}" em português. Responda APENAS JSON: {"suggestions": ["...", "..."]}` 
+              text: cleanWord,
+              mode: 'lookup' 
           });
           
-          if (res.data.suggestions) setDictSuggestions(res.data.suggestions);
-          else if (res.data.corrected) setDictSuggestions([res.data.corrected]);
-          else setDictSuggestions([]);
+          if (res.data.suggestions && Array.isArray(res.data.suggestions)) {
+              // Filtra sugestões idênticas à palavra original
+              const uniqueSuggestions = res.data.suggestions.filter((s: string) => s.toLowerCase() !== cleanWord.toLowerCase());
+              setDictSuggestions(uniqueSuggestions.length > 0 ? uniqueSuggestions : [res.data.corrected].filter(Boolean));
+          }
+          else if (res.data.corrected) {
+              setDictSuggestions([res.data.corrected]);
+          }
+          else {
+              setDictSuggestions([]);
+          }
 
       } catch (e) {
+          console.error(e);
           setDictSuggestions(["Erro ao carregar"]);
       } finally {
           setLoadingSuggestions(false);
@@ -586,7 +621,7 @@ export default function ChapterEditor() {
                 ref={webViewRef}
                 originWhitelist={['*']}
                 source={htmlSource}
-                onLoadEnd={() => webViewRef.current?.postMessage(JSON.stringify({ command: 'setConfig', theme: editorTheme, textColor: customTextColor, hasWallpaper: !!backgroundImage }))}
+                onLoadEnd={() => webViewRef.current?.postMessage(JSON.stringify({ command: 'setConfig', theme: editorTheme, textColor: customTextColor, hasWallpaper: !!backgroundImage, fontFamily: fontFamily }))}
                 onMessage={handleWebViewMessage}
                 style={{ backgroundColor: 'transparent', flex: 1 }}
                 containerStyle={{ backgroundColor: 'transparent' }}
@@ -595,7 +630,20 @@ export default function ChapterEditor() {
                 hideKeyboardAccessoryView={true}
             />
         </View>
-        <EditorToolbar onFormat={handleFormat} activeFormats={activeFormats} onThemeChange={setEditorTheme} currentTheme={editorTheme} onAiFix={requestAiFix} onPickImage={pickImage} onRemoveImage={handleRemoveImage} backgroundImage={backgroundImage} onTextColorChange={setCustomTextColor} customTextColor={customTextColor} />
+        <EditorToolbar 
+          onFormat={handleFormat} 
+          activeFormats={activeFormats} 
+          onThemeChange={setEditorTheme} 
+          currentTheme={editorTheme} 
+          onAiFix={requestAiFix} 
+          onPickImage={pickImage} 
+          onRemoveImage={handleRemoveImage} 
+          backgroundImage={backgroundImage} 
+          onTextColorChange={setCustomTextColor} 
+          customTextColor={customTextColor}
+          onFontChange={setFontFamily}
+          currentFont={fontFamily}
+        />
       </KeyboardAvoidingView>
 
       {/* --- MODAIS --- */}

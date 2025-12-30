@@ -1,15 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, StatusBar, ImageBackground } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, FileText, Settings, Users, Globe, ChevronRight, Plus, Download, Trash2 } from 'lucide-react-native';
-import * as FileSystem from 'expo-file-system/legacy'; // Importante para deletar localmente
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { api } from '../../../../lib/api';
 import { useAuthStore } from '../../../../stores/useAuthStore';
-import { useReadingStore } from '../../../../stores/useReadingStore'; // Para atualizar a estante
+import { useReadingStore } from '../../../../stores/useReadingStore';
 
-// Componentes
 import { CharactersTab } from './_components/CharactersTab';
 import { LoreTab } from './_components/LoreTab';
 import { DraftSettingsModal } from './_components/DraftSettingsModal';
@@ -18,7 +17,7 @@ export default function DraftDashboard() {
   const { draftId } = useLocalSearchParams();
   const router = useRouter();
   const { user, updateUser } = useAuthStore();
-  const { setBooks } = useReadingStore(); // Para forçar refresh da biblioteca
+  const { setBooks } = useReadingStore();
   
   const [draft, setDraft] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -31,8 +30,7 @@ export default function DraftDashboard() {
       const res = await api.get(`/mobile/writer/drafts/${draftId}`);
       setDraft(res.data);
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível carregar o projeto.");
-      router.back();
+      // Silencia erro se for apenas refresh rápido, mas idealmente trata melhor
     } finally {
       setLoading(false);
     }
@@ -40,7 +38,6 @@ export default function DraftDashboard() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!draft) setLoading(true);
       loadDraftDetails();
     }, [draftId])
   );
@@ -54,7 +51,6 @@ export default function DraftDashboard() {
     }
   };
 
-  // --- LÓGICA DE DELETAR RASCUNHO (Agora funciona com o Backend corrigido) ---
   const handleDeleteDraft = () => {
     Alert.alert(
         "Excluir Projeto",
@@ -68,7 +64,7 @@ export default function DraftDashboard() {
                     try {
                         setLoading(true);
                         await api.delete(`/mobile/writer/drafts/${draftId}`);
-                        router.replace('/writer'); // Volta para a lista
+                        router.replace('/writer');
                     } catch (error) {
                         Alert.alert("Erro", "Não foi possível excluir.");
                         setLoading(false);
@@ -79,7 +75,6 @@ export default function DraftDashboard() {
     );
   };
 
-  // --- LÓGICA DE EXPORTAÇÃO E SUBSTITUIÇÃO ---
   const handleExport = () => {
     if (!draft.chapters || draft.chapters.length === 0) {
       return Alert.alert("Livro Vazio", "Escreva pelo menos um capítulo antes de publicar.");
@@ -103,7 +98,6 @@ export default function DraftDashboard() {
 
               const { bookId, action } = res.data;
 
-              // Lógica de Substituição
               if (action === 'updated') {
                   Alert.alert(
                       "Nova Versão Criada",
@@ -113,20 +107,14 @@ export default function DraftDashboard() {
                           { 
                               text: "Sim, Substituir", 
                               onPress: async () => {
-                                  // 1. Apaga arquivo local
                                   const localUri = `${FileSystem.documentDirectory}${bookId}.epub`;
                                   await FileSystem.deleteAsync(localUri, { idempotent: true });
-                                  
-                                  // 2. Limpa cache de download (opcional, dependendo de como você implementou no useReader)
-                                  // await AsyncStorage.removeItem(`@book_download_date:${bookId}`);
-
-                                  // 3. Força refresh da store
                                   try {
                                       const newBooks = await api.get('/mobile/books');
                                       setBooks(newBooks.data);
                                   } catch (e) {}
 
-                                  Alert.alert("Sucesso", "Livro atualizado! Abra-o para ler a nova versão.", [
+                                  Alert.alert("Sucesso", "Livro atualizado!", [
                                       { text: "Ler Agora", onPress: () => router.push(`/read/${bookId}`) }
                                   ]);
                               } 
@@ -134,14 +122,9 @@ export default function DraftDashboard() {
                       ]
                   );
               } else {
-                  // Novo livro
-                  Alert.alert(
-                    "Sucesso! 🎉", 
-                    "Livro publicado e adicionado à biblioteca.",
-                    [
+                  Alert.alert("Sucesso! 🎉", "Livro publicado.", [
                       { text: "Ler Agora", onPress: () => router.push(`/read/${bookId}`) }
-                    ]
-                  );
+                  ]);
               }
 
             } catch (error: any) {
@@ -156,53 +139,60 @@ export default function DraftDashboard() {
     );
   };
 
-  if (loading) return <View className="flex-1 bg-black items-center justify-center"><ActivityIndicator color="#6366f1" /></View>;
+  if (loading || !draft) return <View className="flex-1 bg-black items-center justify-center"><ActivityIndicator color="#6366f1" /></View>;
 
   return (
     <View className="flex-1 bg-black">
       <StatusBar barStyle="light-content" />
       
-      {/* HEADER AMBIENTADO */}
+      {/* HEADER COM CAPA DE FUNDO */}
       <View className="h-72 relative">
-        <LinearGradient colors={['#312e81', '#1e1b4b', '#000']} className="absolute inset-0" />
+        {draft.coverUrl ? (
+            <ImageBackground source={{ uri: draft.coverUrl }} className="absolute inset-0" resizeMode="cover">
+                 <LinearGradient colors={['rgba(0,0,0,0.3)', '#000']} className="absolute inset-0" />
+            </ImageBackground>
+        ) : (
+             <LinearGradient colors={['#312e81', '#1e1b4b', '#000']} className="absolute inset-0" />
+        )}
+        
         <View className="absolute bottom-0 w-full p-6 pb-6">
             <View className="flex-row justify-between items-start mb-4">
-                <TouchableOpacity onPress={() => router.back()} className="bg-black/20 p-2 rounded-full">
+                <TouchableOpacity onPress={() => router.back()} className="bg-black/30 p-2 rounded-full backdrop-blur-md">
                     <Feather color="white" size={20} />
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={handleDeleteDraft} className="bg-red-500/20 p-2 rounded-full border border-red-500/30">
+                <TouchableOpacity onPress={handleDeleteDraft} className="bg-red-500/20 p-2 rounded-full border border-red-500/30 backdrop-blur-md">
                     <Trash2 color="#f87171" size={18} />
                 </TouchableOpacity>
             </View>
             
-            <Text className="text-indigo-300 font-bold text-xs uppercase tracking-widest mb-1">
+            <Text className="text-indigo-300 font-bold text-xs uppercase tracking-widest mb-1 shadow-black shadow-md">
                 {draft.genre || 'Rascunho'} • {draft.status}
             </Text>
-            <Text className="text-white font-black text-3xl shadow-sm mb-4 leading-8">
+            <Text className="text-white font-black text-3xl shadow-sm mb-4 leading-8 shadow-black">
               {draft.title}
             </Text>
             
             <View className="flex-row space-x-3 gap-3">
                 <TouchableOpacity 
                     onPress={() => setSettingsVisible(true)}
-                    className="flex-row items-center bg-indigo-500/20 px-4 py-2 rounded-xl border border-indigo-500/30"
+                    className="flex-row items-center bg-white/10 px-4 py-2 rounded-xl border border-white/20 backdrop-blur-md"
                 >
                     <Settings size={14} color="#a5b4fc" />
-                    <Text className="text-indigo-200 text-xs font-bold ml-2">Configurar</Text>
+                    <Text className="text-indigo-100 text-xs font-bold ml-2">Configurar</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
                   onPress={handleExport}
                   disabled={exporting}
-                  className="flex-row items-center bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/30 active:bg-emerald-500/20"
+                  className="flex-row items-center bg-emerald-500/20 px-4 py-2 rounded-xl border border-emerald-500/30 active:bg-emerald-500/30 backdrop-blur-md"
                 >
                     {exporting ? (
                       <ActivityIndicator size="small" color="#34d399" />
                     ) : (
                       <>
                         <Download size={14} color="#34d399" />
-                        <Text className="text-emerald-400 text-xs font-bold ml-2">Publicar</Text>
+                        <Text className="text-emerald-300 text-xs font-bold ml-2">Publicar</Text>
                       </>
                     )}
                 </TouchableOpacity>
@@ -294,6 +284,7 @@ export default function DraftDashboard() {
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
         draft={draft}
+        onUpdate={loadDraftDetails} // Passa função de refresh
       />
 
     </View>

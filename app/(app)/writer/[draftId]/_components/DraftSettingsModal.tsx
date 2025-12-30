@@ -1,23 +1,95 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView, TextInput, Switch, KeyboardAvoidingView, Platform } from 'react-native';
-import { X, List, Hash, Clock, Book, ToggleLeft, Save } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, Modal, ScrollView, TextInput, Switch, Image, Alert, ActivityIndicator } from 'react-native';
+import { X, List, Hash, Clock, Book, ToggleLeft, Save, UploadCloud } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { SlideInDown } from 'react-native-reanimated';
+import Animated, { SlideInDown, Easing } from 'react-native-reanimated';
+import * as ImagePicker from 'expo-image-picker';
+import { api } from '../../../../../lib/api';
 
 interface DraftSettingsModalProps {
   visible: boolean;
   onClose: () => void;
   draft: any;
+  onUpdate: () => void; // Callback para atualizar o pai
 }
 
-export const DraftSettingsModal = ({ visible, onClose, draft }: DraftSettingsModalProps) => {
+export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftSettingsModalProps) => {
   const [activeTab, setActiveTab] = useState<'index' | 'general' | 'references'>('general');
   const [generateTocPage, setGenerateTocPage] = useState(true);
   const [autoLinkMentions, setAutoLinkMentions] = useState(false);
+  
+  // Estados de Edição
+  const [title, setTitle] = useState(draft?.title || '');
+  const [genre, setGenre] = useState(draft?.genre || '');
+  const [coverUrl, setCoverUrl] = useState(draft?.coverUrl || null);
+  
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Estatísticas simuladas para "encorpar" a lógica visual
-  const totalWords = draft?.chapters?.reduce((acc: number, ch: any) => acc + (ch.content?.split(' ').length || 0), 0) || 0;
-  const readTime = Math.ceil(totalWords / 200); // 200 palavras por minuto
+  // Sincroniza dados quando o draft muda
+  useEffect(() => {
+    if (draft) {
+      setTitle(draft.title);
+      setGenre(draft.genre || '');
+      setCoverUrl(draft.coverUrl);
+    }
+  }, [draft]);
+
+  // Estatísticas
+  const totalWords = draft?.chapters?.reduce((acc: number, ch: any) => acc + (ch.content?.split(/\s+/).length || 0), 0) || 0;
+  const readTime = Math.ceil(totalWords / 200);
+
+  // --- LÓGICA DE UPLOAD DE CAPA ---
+  const handlePickCover = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [2, 3], // Proporção de livro padrão
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+        uploadCover(result.assets[0].uri);
+    }
+  };
+
+  const uploadCover = async (uri: string) => {
+    setIsUploading(true);
+    try {
+        const formData = new FormData();
+        const filename = uri.split('/').pop() || 'cover.jpg';
+        // @ts-ignore
+        formData.append('file', { uri, name: filename, type: 'image/jpeg' });
+
+        const res = await api.post(`/mobile/writer/upload?filename=${filename}`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        setCoverUrl(res.data.url); // Atualiza visualmente
+    } catch (e) {
+        Alert.alert("Erro", "Falha no upload da capa.");
+    } finally {
+        setIsUploading(false);
+    }
+  };
+
+  // --- SALVAR ALTERAÇÕES ---
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+        await api.patch(`/mobile/writer/drafts/${draft.id}`, {
+            title,
+            genre,
+            coverUrl
+        });
+        onUpdate(); // Atualiza a tela anterior
+        onClose();
+    } catch (e) {
+        Alert.alert("Erro", "Falha ao salvar alterações.");
+    } finally {
+        setIsSaving(false);
+    }
+  };
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -25,20 +97,48 @@ export const DraftSettingsModal = ({ visible, onClose, draft }: DraftSettingsMod
         return (
           <View>
             <Text className="text-zinc-500 text-xs font-bold uppercase mb-2">Metadados do Livro</Text>
-            <View className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 mb-4">
-              <View className="flex-row justify-between mb-4 border-b border-zinc-800 pb-4">
-                <Text className="text-white font-bold">Título</Text>
-                <Text className="text-zinc-400">{draft?.title}</Text>
+            <View className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 mb-6">
+              <View className="mb-4 border-b border-zinc-800 pb-4">
+                <Text className="text-zinc-400 text-xs mb-1">Título</Text>
+                <TextInput 
+                    value={title}
+                    onChangeText={setTitle}
+                    className="text-white font-bold text-base"
+                    placeholderTextColor="#52525b"
+                />
               </View>
-              <View className="flex-row justify-between">
-                <Text className="text-white font-bold">Gênero</Text>
-                <Text className="text-zinc-400">{draft?.genre}</Text>
+              <View>
+                <Text className="text-zinc-400 text-xs mb-1">Gênero</Text>
+                <TextInput 
+                    value={genre}
+                    onChangeText={setGenre}
+                    className="text-white font-medium"
+                    placeholder="Ex: Fantasia, Sci-Fi..."
+                    placeholderTextColor="#52525b"
+                />
               </View>
             </View>
             
             <Text className="text-zinc-500 text-xs font-bold uppercase mb-2">Capa</Text>
-            <TouchableOpacity className="bg-zinc-900 h-32 rounded-xl border border-dashed border-zinc-700 items-center justify-center mb-6">
-                <Text className="text-zinc-500 text-xs">Toque para alterar a capa</Text>
+            <TouchableOpacity 
+                onPress={handlePickCover}
+                className="bg-zinc-900 h-48 w-32 self-center rounded-xl border border-dashed border-zinc-700 items-center justify-center mb-6 overflow-hidden relative"
+            >
+                {isUploading ? (
+                    <ActivityIndicator color="#6366f1" />
+                ) : coverUrl ? (
+                    <>
+                        <Image source={{ uri: coverUrl }} className="w-full h-full opacity-80" resizeMode="cover" />
+                        <View className="absolute bg-black/50 inset-0 items-center justify-center">
+                            <UploadCloud color="white" size={24} />
+                        </View>
+                    </>
+                ) : (
+                    <>
+                        <UploadCloud color="#52525b" size={24} className="mb-2" />
+                        <Text className="text-zinc-500 text-xs text-center px-2">Toque para adicionar capa</Text>
+                    </>
+                )}
             </TouchableOpacity>
           </View>
         );
@@ -67,11 +167,11 @@ export const DraftSettingsModal = ({ visible, onClose, draft }: DraftSettingsMod
                         <View className="flex-1">
                             <Text className="text-white font-bold text-sm" numberOfLines={1}>{chapter.title}</Text>
                             <Text className="text-zinc-500 text-[10px]">
-                                {chapter.content?.split(' ').length || 0} palavras
+                                {chapter.content?.split(/\s+/).length || 0} palavras
                             </Text>
                         </View>
                         <View className="bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
-                            <Text className="text-zinc-500 text-[10px]">Pág {index * 3 + 1}</Text>
+                            <Text className="text-zinc-500 text-[10px]">Cap {index + 1}</Text>
                         </View>
                     </View>
                 ))}
@@ -128,7 +228,8 @@ export const DraftSettingsModal = ({ visible, onClose, draft }: DraftSettingsMod
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View className="flex-1 justify-end bg-black/60">
         <Animated.View 
-            entering={SlideInDown.springify().damping(15)}
+            // Animação suavizada (sem spring)
+            entering={SlideInDown.duration(300).easing(Easing.out(Easing.quad))}
             className="bg-zinc-950 rounded-t-[32px] h-[85%] border-t border-zinc-800"
         >
             {/* Handle */}
@@ -171,13 +272,17 @@ export const DraftSettingsModal = ({ visible, onClose, draft }: DraftSettingsMod
 
             {/* Footer Action */}
             <View className="p-6 border-t border-zinc-900 bg-zinc-950 pb-10">
-                <TouchableOpacity onPress={onClose}>
+                <TouchableOpacity onPress={handleSave} disabled={isSaving}>
                     <LinearGradient
                         colors={['#4f46e5', '#3730a3']}
                         className="p-4 rounded-2xl flex-row justify-center items-center"
                     >
-                        <Save size={18} color="white" style={{ marginRight: 8 }} />
-                        <Text className="text-white font-bold uppercase tracking-widest">Salvar Alterações</Text>
+                        {isSaving ? <ActivityIndicator color="white" /> : (
+                            <>
+                                <Save size={18} color="white" style={{ marginRight: 8 }} />
+                                <Text className="text-white font-bold uppercase tracking-widest">Salvar Alterações</Text>
+                            </>
+                        )}
                     </LinearGradient>
                 </TouchableOpacity>
             </View>
