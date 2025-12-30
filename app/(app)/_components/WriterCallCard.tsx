@@ -1,9 +1,19 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Sparkles, PenTool, ChevronRight, Clock, FileText, Plus } from 'lucide-react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { 
+  Sparkles, 
+  PenTool, 
+  Clock, 
+  FileText, 
+  Plus, 
+  LayoutGrid, 
+  ArrowRight 
+} from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { api } from '../../../lib/api';
 
 interface Draft {
@@ -21,7 +31,6 @@ export const WriterCallCard = () => {
   const [latestDraft, setLatestDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Atualiza sempre que a tela ganha foco (ex: voltou do editor)
   useFocusEffect(
     useCallback(() => {
       fetchLatestDraft();
@@ -30,10 +39,8 @@ export const WriterCallCard = () => {
 
   const fetchLatestDraft = async () => {
     try {
-      // Busca os drafts ordenados (assumindo que a API retorna lista)
       const res = await api.get('/mobile/writer/drafts');
       if (Array.isArray(res.data) && res.data.length > 0) {
-        // Ordena no front por garantia (mais recente primeiro)
         const sorted = res.data.sort((a: Draft, b: Draft) => 
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
@@ -44,129 +51,181 @@ export const WriterCallCard = () => {
     } catch (error) {
       console.log('Erro ao buscar drafts:', error);
     } finally {
+      // Pequeno delay artificial se for muito rápido, para evitar "flicker", 
+      // ou remova se preferir instantâneo.
       setLoading(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffHours < 1) return 'Editado agora mesmo';
-    if (diffHours < 24) return `Editado há ${diffHours}h`;
-    if (diffDays === 1) return 'Editado ontem';
-    return `Editado em ${date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`;
+  const getRelativeTime = (dateString: string) => {
+    try {
+      return formatDistanceToNow(new Date(dateString), { 
+        addSuffix: true, 
+        locale: ptBR 
+      });
+    } catch (e) {
+      return 'recentemente';
+    }
   };
 
+  // --- SKELETON LOADING (UX Melhorada) ---
   if (loading) {
     return (
-        <View className="mx-6 mt-6 mb-2 h-28 bg-zinc-900/50 rounded-[24px] border border-zinc-800 justify-center items-center">
-            <ActivityIndicator color="#6366f1" />
+      <View className="mx-6 mt-6 mb-2 h-[140px] bg-zinc-900/50 rounded-[24px] border border-zinc-800 overflow-hidden">
+        <View className="flex-1 p-4 flex-row gap-4 items-center opacity-50">
+           <View className="h-24 w-16 bg-zinc-700 rounded-lg animate-pulse" />
+           <View className="flex-1 gap-3">
+              <View className="h-4 w-3/4 bg-zinc-700 rounded animate-pulse" />
+              <View className="h-3 w-1/2 bg-zinc-800 rounded animate-pulse" />
+           </View>
         </View>
+      </View>
     );
   }
 
-  // --- CENÁRIO 1: CONTINUAR ESCREVENDO (EXISTE DRAFT) ---
+  // --- CENÁRIO: TEM DRAFT (HUB DE ESCRITA) ---
   if (latestDraft) {
     return (
-      <Animated.View entering={FadeIn.duration(500)}>
-        <TouchableOpacity 
-          activeOpacity={0.9} 
-          onPress={() => router.push(`/writer/${latestDraft.id}` as any)} 
-          className="mx-6 mt-6 mb-2 shadow-2xl shadow-indigo-500/10"
-        >
+      <Animated.View entering={FadeIn.duration(400)} exiting={FadeOut}>
+        <View className="mx-6 mt-6 mb-2">
+          
+          {/* Header do Card - Título da Seção + Link para Index */}
+          <View className="flex-row items-center justify-between mb-3 px-1">
+            <View className="flex-row items-center gap-2">
+              <Sparkles size={14} color="#818cf8" />
+              <Text className="text-zinc-100 font-semibold text-sm tracking-wide">
+                Writer Studio
+              </Text>
+            </View>
+            
+            <TouchableOpacity 
+              onPress={() => router.push('/writer' as any)}
+              className="flex-row items-center gap-1 active:opacity-70"
+            >
+              <Text className="text-zinc-400 text-xs font-medium">Ver todos</Text>
+              <LayoutGrid size={12} color="#a1a1aa" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Card Principal - Foco no Resume */}
           <LinearGradient
-            colors={['#18181b', '#0f0f11']} // Fundo dark sóbrio
+            colors={['#18181b', '#111113']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            className="rounded-[24px] p-[1px] overflow-hidden border border-zinc-700/50"
+            className="rounded-[24px] p-[1px] border border-zinc-800 shadow-xl shadow-black/40"
           >
-            <View className="bg-zinc-900/90 p-4 rounded-[23px] relative flex-row items-center gap-4">
-               
-               {/* Capa do Livro */}
-               <View className="h-20 w-14 rounded-lg bg-zinc-800 shadow-md border border-zinc-700 overflow-hidden relative">
-                  {latestDraft.coverUrl ? (
+            <View className="bg-zinc-900/40 rounded-[24px] overflow-hidden">
+              <TouchableOpacity 
+                activeOpacity={0.9} 
+                onPress={() => router.push(`/writer/${latestDraft.id}` as any)}
+                className="p-4 flex-row gap-4"
+              >
+                {/* Coluna da Capa */}
+                <View className="relative">
+                  <View className="h-28 w-20 rounded-xl bg-zinc-800 shadow-lg border border-zinc-700/50 overflow-hidden">
+                    {latestDraft.coverUrl ? (
                       <Image source={{ uri: latestDraft.coverUrl }} className="w-full h-full" resizeMode="cover" />
-                  ) : (
-                      <View className="flex-1 items-center justify-center bg-indigo-900/30">
-                          <FileText size={20} color="#6366f1" />
+                    ) : (
+                      <View className="flex-1 items-center justify-center bg-zinc-800">
+                          <FileText size={24} color="#6366f1" opacity={0.5} />
                       </View>
-                  )}
-                  {/* Badge de Progresso (Capítulos) */}
-                  <View className="absolute bottom-0 w-full bg-black/60 py-0.5 items-center">
-                      <Text className="text-[8px] text-white font-bold">{latestDraft._count?.chapters || 0} caps.</Text>
+                    )}
                   </View>
-               </View>
+                  {/* Badge Caps */}
+                  <View className="absolute -bottom-2 -right-2 bg-zinc-950 border border-zinc-800 px-2 py-0.5 rounded-full shadow-sm">
+                     <Text className="text-[9px] text-zinc-300 font-bold">
+                        {latestDraft._count?.chapters || 0} caps
+                     </Text>
+                  </View>
+                </View>
 
-               {/* Informações */}
-               <View className="flex-1">
-                  <View className="flex-row items-center gap-1.5 mb-1">
-                      <View className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <Text className="text-emerald-500 text-[10px] font-bold uppercase tracking-widest">Em Progresso</Text>
-                  </View>
-                  
-                  <Text className="text-white font-bold text-lg leading-5 mb-1.5" numberOfLines={1}>
-                      {latestDraft.title}
-                  </Text>
-                  
-                  <View className="flex-row items-center gap-1.5">
-                      <Clock size={12} color="#71717a" />
-                      <Text className="text-zinc-500 text-xs font-medium">
-                          {formatDate(latestDraft.updatedAt)}
+                {/* Coluna de Info + Ações */}
+                <View className="flex-1 justify-between py-1">
+                  <View>
+                    <View className="flex-row items-center gap-1.5 mb-1.5">
+                      <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                      <Text className="text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                        Em progresso
                       </Text>
+                    </View>
+                    
+                    <Text className="text-zinc-50 font-bold text-lg leading-6 mb-1" numberOfLines={2}>
+                      {latestDraft.title}
+                    </Text>
+                    
+                    <View className="flex-row items-center gap-1.5">
+                      <Clock size={11} color="#71717a" />
+                      <Text className="text-zinc-500 text-[11px]">
+                        Editado {getRelativeTime(latestDraft.updatedAt)}
+                      </Text>
+                    </View>
                   </View>
-               </View>
 
-               {/* Botão de Ação */}
-               <View className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 items-center justify-center">
-                  <PenTool size={18} color="#e4e4e7" />
-               </View>
+                  {/* Botão de Ação Primária */}
+                  <View className="self-end flex-row items-center bg-indigo-600/10 px-3 py-2 rounded-full border border-indigo-500/20 gap-2">
+                    <Text className="text-indigo-400 text-xs font-bold">Continuar</Text>
+                    <PenTool size={12} color="#818cf8" />
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Ação Secundária (Footer do Card) - Criar Novo Rápido */}
+              <View className="bg-black/20 border-t border-white/5 px-4 py-2.5 flex-row items-center justify-between">
+                 <Text className="text-zinc-500 text-[10px] font-medium">
+                   Quer começar algo novo?
+                 </Text>
+                 <TouchableOpacity 
+                   onPress={() => router.push('/writer/create' as any)} // Assumindo rota de criação direta ou vai para index
+                   className="flex-row items-center gap-1.5 active:opacity-60"
+                 >
+                    <Plus size={12} color="#e4e4e7" />
+                    <Text className="text-zinc-300 text-[11px] font-semibold">Novo Livro</Text>
+                 </TouchableOpacity>
+              </View>
 
             </View>
           </LinearGradient>
-        </TouchableOpacity>
+        </View>
       </Animated.View>
     );
   }
 
-  // --- CENÁRIO 2: NOVO PROJETO (SEM DRAFTS) ---
+  // --- CENÁRIO: SEM DRAFTS (Card de Onboarding) ---
   return (
     <Animated.View entering={FadeIn.duration(500)}>
       <TouchableOpacity 
         activeOpacity={0.9} 
         onPress={() => router.push('/writer' as any)} 
-        className="mx-6 mt-6 mb-2 shadow-xl shadow-indigo-500/20"
+        className="mx-6 mt-6 mb-2 shadow-2xl shadow-indigo-500/10"
       >
         <LinearGradient
-          colors={['#312e81', '#1e1b4b']} // Indigo Vibrante
+          colors={['#312e81', '#1e1b4b']} 
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          className="rounded-[24px] p-[1px] overflow-hidden border border-indigo-500/40"
+          className="rounded-[24px] p-[1px] border border-indigo-400/30"
         >
-          <View className="bg-black/20 p-5 rounded-[23px] relative overflow-hidden">
+          <View className="bg-zinc-950/20 p-5 rounded-[23px] relative overflow-hidden min-h-[140px] justify-center">
               
-              {/* Background Decor */}
-              <View className="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/30 rounded-full blur-3xl" />
-              <View className="absolute -left-4 -bottom-4 w-24 h-24 bg-purple-500/20 rounded-full blur-2xl" />
-
+              {/* Background Effects */}
+              <View className="absolute -right-4 -top-4 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl" />
+              
               <View className="flex-row items-center justify-between">
                   <View className="flex-1 mr-4">
-                      <View className="flex-row items-center mb-2 bg-indigo-500/20 self-start px-2 py-0.5 rounded-full border border-indigo-500/30">
-                          <Sparkles size={10} color="#a5b4fc" style={{ marginRight: 4 }} />
-                          <Text className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest">Estúdio Criativo</Text>
+                      <View className="flex-row items-center mb-3 bg-indigo-500/20 self-start px-2.5 py-1 rounded-full border border-indigo-500/30">
+                          <Sparkles size={11} color="#c7d2fe" style={{ marginRight: 5 }} />
+                          <Text className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">
+                            Comece a Escrever
+                          </Text>
                       </View>
                       
-                      <Text className="text-white font-bold text-xl leading-6 mb-1">
+                      <Text className="text-white font-bold text-xl leading-6 mb-1.5">
                           Tire sua ideia do papel
                       </Text>
-                      <Text className="text-indigo-200/80 text-xs font-medium leading-4">
-                          Escreva, publique e monetize sua obra.
+                      <Text className="text-indigo-200/70 text-xs leading-4">
+                          Crie, publique e alcance leitores.
                       </Text>
                   </View>
 
-                  <View className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg shadow-white/20">
-                      <Plus size={24} color="#312e81" strokeWidth={3} />
+                  <View className="w-12 h-12 bg-white/10 rounded-full items-center justify-center border border-white/20">
+                      <ArrowRight size={24} color="#fff" />
                   </View>
               </View>
           </View>
