@@ -19,13 +19,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { User } from '../_types/user';
-import { notificationService, Notification, getMarketplaceStatus } from '../../../lib/api';
+import { api, Notification } from '../../../lib/api'; // Ajustado para usar api direta
 
 // Modais
 import { NotificationsSheet } from './NotificationsSheet';
 import { SearchSheet } from './SearchSheet';
 
-// Interface compatível com Book (completo) e LastRead (cache)
 export interface MinimalBook {
   id: string;
   title: string;
@@ -40,16 +39,13 @@ interface GreetingHeaderProps {
   onContinueReading: (book: MinimalBook) => void;
 }
 
-// --- BADGE INTELIGENTE (NOVO -> BOLINHA) ---
+// --- BADGE INTELIGENTE ---
 const SmartBadge = () => {
-    const progress = useSharedValue(0); // 0 = Texto "NOVO", 1 = Bolinha
+    const progress = useSharedValue(0);
     const shake = useSharedValue(0);
 
     useEffect(() => {
-        // 1. Aguarda 3 segundos e encolhe para bolinha
         progress.value = withDelay(3000, withSpring(1, { damping: 15 }));
-
-        // 2. Vibração ocasional para chamar atenção (a cada 5 seg)
         const interval = setInterval(() => {
             shake.value = withSequence(
                 withTiming(-15, { duration: 50 }),
@@ -59,86 +55,54 @@ const SmartBadge = () => {
                 withTiming(0, { duration: 50 })
             );
         }, 5000);
-
         return () => clearInterval(interval);
     }, []);
 
-    // Animação de tamanho e posição
     const containerStyle = useAnimatedStyle(() => {
         const width = interpolate(progress.value, [0, 1], [36, 8]); 
         const height = interpolate(progress.value, [0, 1], [16, 8]);
-        // Ajusta a posição para ficar bem no cantinho quando for bolinha
         const top = interpolate(progress.value, [0, 1], [-10, -2]); 
         const right = interpolate(progress.value, [0, 1], [-10, -2]);
 
-        return {
-            width,
-            height,
-            top,
-            right,
-            transform: [{ rotate: `${shake.value}deg` }]
-        };
+        return { width, height, top, right, transform: [{ rotate: `${shake.value}deg` }] };
     });
 
-    // Texto some quando vira bolinha
-    const textStyle = useAnimatedStyle(() => {
-        return {
-            opacity: interpolate(progress.value, [0, 0.6], [1, 0], Extrapolation.CLAMP),
-            transform: [{ scale: interpolate(progress.value, [0, 1], [1, 0]) }]
-        };
-    });
+    const textStyle = useAnimatedStyle(() => ({
+        opacity: interpolate(progress.value, [0, 0.6], [1, 0], Extrapolation.CLAMP),
+        transform: [{ scale: interpolate(progress.value, [0, 1], [1, 0]) }]
+    }));
 
     return (
         <Animated.View style={[containerStyle, { position: 'absolute', zIndex: 20, borderRadius: 999, overflow: 'hidden' }]}>
             <LinearGradient
-                colors={['#ec4899', '#8b5cf6']} // Gradiente Vibrante
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                colors={['#ec4899', '#8b5cf6']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
             >
-                <Animated.Text style={[textStyle, { fontSize: 8, fontWeight: '900', color: 'white' }]}>
-                    NOVO
-                </Animated.Text>
+                <Animated.Text style={[textStyle, { fontSize: 8, fontWeight: '900', color: 'white' }]}>NOVO</Animated.Text>
             </LinearGradient>
         </Animated.View>
     );
 };
 
 // --- ÍCONE GENÉRICO ---
-const IconButton = ({ 
-  icon: Icon, 
-  onPress, 
-  badgeCount = 0, 
-  showSmartBadge = false,
-}: { 
-  icon: any, 
-  onPress: () => void, 
-  badgeCount?: number, 
-  showSmartBadge?: boolean,
-}) => {
+const IconButton = ({ icon: Icon, onPress, badgeCount = 0, showSmartBadge = false }: any) => {
   const scale = useSharedValue(1);
-
   const handlePressIn = () => { scale.value = withSpring(0.9); };
   const handlePressOut = () => { scale.value = withSpring(1); onPress(); };
-
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   return (
     <Animated.View style={animatedStyle}>
       <TouchableOpacity
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        onPressIn={handlePressIn} onPressOut={handlePressOut}
         activeOpacity={1}
-        className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 items-center justify-center shadow-sm relative"
+        className="w-10 h-10 rounded-full bg-zinc-900/80 border border-zinc-800 items-center justify-center relative backdrop-blur-md"
       >
         <Icon size={20} color={badgeCount > 0 || showSmartBadge ? "white" : "#a1a1aa"} />
-        
-        {/* Badge Numérico Padrão (Sino) */}
         {badgeCount > 0 && !showSmartBadge && (
           <View className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-zinc-900 z-10" />
         )}
-
-        {/* Badge Inteligente (Carrinho) */}
         {showSmartBadge && <SmartBadge />}
       </TouchableOpacity>
     </Animated.View>
@@ -148,12 +112,10 @@ const IconButton = ({
 export function GreetingHeader({ user, lastReadBook, onContinueReading }: GreetingHeaderProps) {
   const router = useRouter();
   const [greeting, setGreeting] = useState('');
-  
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-
   const [hasNewProducts, setHasNewProducts] = useState(false); 
 
   useEffect(() => {
@@ -162,65 +124,54 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
     else if (hour < 18) setGreeting('Boa tarde');
     else setGreeting('Boa noite');
 
-    // Carrega notificações
-    notificationService.getAll().then(res => {
-        if(res) {
-            setNotifications(res.notifications);
-            setUnreadCount(res.unreadCount);
-        }
-    });
-
-    // Lógica para verificar novidades no Shop
+    loadNotifications();
     checkShopUpdates();
   }, []);
 
+  const loadNotifications = async () => {
+      try {
+          const res = await api.get('/mobile/notifications');
+          if (res.data && Array.isArray(res.data.notifications)) {
+              setNotifications(res.data.notifications);
+              setUnreadCount(res.data.unreadCount || 0);
+          }
+      } catch (e) {}
+  };
+
   const checkShopUpdates = async () => {
       try {
-          // 1. Busca a data do último produto criado no backend
-          const latestProductDateStr = await getMarketplaceStatus();
+          const res = await api.get('/mobile/marketplace/status');
+          const latestProductDateStr = res.data?.lastProductDate;
           if (!latestProductDateStr) return;
 
           const latestProductDate = new Date(latestProductDateStr).getTime();
-
-          // 2. Busca a data da última visita do usuário ao shop (salva localmente)
           const lastVisitStr = await AsyncStorage.getItem('@last_shop_visit');
           const lastVisitDate = lastVisitStr ? parseInt(lastVisitStr) : 0;
 
-          // 3. Se o produto for mais novo que a última visita, mostra o badge
-          if (latestProductDate > lastVisitDate) {
-              setHasNewProducts(true);
-          }
-      } catch (e) {
-          console.error("Erro verificando updates", e);
-      }
+          if (latestProductDate > lastVisitDate) setHasNewProducts(true);
+      } catch (e) {}
   };
 
   const handleOpenShop = async () => {
-      // 1. Remove o badge visualmente
       setHasNewProducts(false);
-      
-      // 2. Salva a data/hora atual como última visita
       await AsyncStorage.setItem('@last_shop_visit', Date.now().toString());
-      
-      // 3. Navega
-      router.push('/(app)/shop');
+      router.push('/(app)/shop' as any);
   };
 
   const handleMarkAsRead = async (id?: string) => {
     if (id) {
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
         setUnreadCount(prev => Math.max(0, prev - 1));
+        await api.patch('/mobile/notifications', { notificationId: id });
     } else {
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         setUnreadCount(0);
+        await api.patch('/mobile/notifications', {});
     }
-    await notificationService.markAsRead(id);
   };
 
   return (
-    <View className="px-6 pt-4 pb-2 mb-2 z-50">
-      
-      {/* MODAIS */}
+    <View className="px-6 pt-2 pb-2 mb-2 z-50">
       <NotificationsSheet 
         visible={showNotifications}
         notifications={notifications}
@@ -236,9 +187,7 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
       />
 
       {/* --- HEADER --- */}
-      <View className="flex-row items-center justify-between mb-8">
-        
-        {/* Avatar e Saudação */}
+      <View className="flex-row items-center justify-between mb-8 mt-2">
         <Animated.View entering={FadeInDown.duration(600)} className="flex-row items-center gap-3 flex-1">
           <TouchableOpacity onPress={() => router.push(`/(app)/profile/${user?.id}` as any)}>
             <View className="p-0.5 rounded-full border-2 border-emerald-500/30">
@@ -249,45 +198,23 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
             </View>
           </TouchableOpacity>
           <View>
-            <Text className="text-zinc-400 text-xs font-medium uppercase tracking-wide">
-                {greeting},
-            </Text>
+            <Text className="text-zinc-400 text-xs font-medium uppercase tracking-wide">{greeting},</Text>
             <Text className="text-white text-xl font-bold leading-6" numberOfLines={1}>
                 {user?.name?.split(' ')[0] || 'Leitor'}
             </Text>
           </View>
         </Animated.View>
 
-        {/* Botões de Ação */}
         <View className="flex-row items-center gap-3">
-            {/* LUPA */}
-            <IconButton 
-                icon={Search} 
-                onPress={() => setShowSearch(true)} 
-            />
-
-            {/* CARRINHO (Com Badge Inteligente) */}
-            <IconButton 
-                icon={ShoppingCart} 
-                showSmartBadge={hasNewProducts}
-                onPress={handleOpenShop} 
-            />
-
-            {/* SINO */}
-            <IconButton 
-                icon={Bell} 
-                badgeCount={unreadCount}
-                onPress={() => setShowNotifications(true)} 
-            />
+            <IconButton icon={Search} onPress={() => setShowSearch(true)} />
+            <IconButton icon={ShoppingCart} showSmartBadge={hasNewProducts} onPress={handleOpenShop} />
+            <IconButton icon={Bell} badgeCount={unreadCount} onPress={() => setShowNotifications(true)} />
         </View>
       </View>
 
       {/* --- SESSÃO CONTINUAR LENDO --- */}
       {lastReadBook ? (
-        <Animated.View 
-            entering={FadeInRight.delay(300).springify()} 
-            className="w-full"
-        >
+        <Animated.View entering={FadeInRight.delay(300).springify()} className="w-full">
             <TouchableOpacity 
                 activeOpacity={0.9}
                 onPress={() => onContinueReading(lastReadBook)}
@@ -295,21 +222,15 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
             >
                 <LinearGradient
                     colors={['#18181b', '#09090b']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                     className="absolute inset-0 rounded-3xl border border-zinc-800"
                 />
-                
                 <View className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl" />
 
                 <View className="flex-row p-4 items-center">
                     <Animated.View entering={ZoomIn.delay(500)} className="shadow-xl shadow-black">
                         {lastReadBook.coverUrl ? (
-                            <Image 
-                                source={{ uri: lastReadBook.coverUrl }} 
-                                className="w-20 h-28 rounded-lg bg-zinc-800" 
-                                resizeMode="cover"
-                            />
+                            <Image source={{ uri: lastReadBook.coverUrl }} className="w-20 h-28 rounded-lg bg-zinc-800" resizeMode="cover" />
                         ) : (
                             <View className="w-20 h-28 rounded-lg bg-zinc-800 items-center justify-center border border-zinc-700">
                                 <BookOpen size={24} color="#52525b" />
@@ -321,16 +242,10 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
                         <View>
                             <View className="flex-row items-center mb-1">
                                 <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2 animate-pulse" />
-                                <Text className="text-emerald-500 text-[10px] font-bold uppercase tracking-widest">
-                                    Em andamento
-                                </Text>
+                                <Text className="text-emerald-500 text-[10px] font-bold uppercase tracking-widest">Em andamento</Text>
                             </View>
-                            <Text className="text-white font-bold text-lg leading-tight" numberOfLines={2}>
-                                {lastReadBook.title}
-                            </Text>
-                            <Text className="text-zinc-500 text-xs mt-0.5" numberOfLines={1}>
-                                {lastReadBook.author || 'Autor desconhecido'}
-                            </Text>
+                            <Text className="text-white font-bold text-lg leading-tight" numberOfLines={2}>{lastReadBook.title}</Text>
+                            <Text className="text-zinc-500 text-xs mt-0.5" numberOfLines={1}>{lastReadBook.author || 'Autor desconhecido'}</Text>
                         </View>
 
                         <View className="flex-row items-center gap-3 mt-2">
@@ -340,13 +255,9 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
                                     <Text className="text-white text-[10px] font-bold">{Math.round(lastReadBook.progress || 0)}%</Text>
                                 </View>
                                 <View className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                                    <View 
-                                        className="h-full bg-emerald-500 rounded-full" 
-                                        style={{ width: `${Math.min(lastReadBook.progress || 0, 100)}%` }} 
-                                    />
+                                    <View className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(lastReadBook.progress || 0, 100)}%` }} />
                                 </View>
                             </View>
-                            
                             <View className="w-8 h-8 rounded-full bg-white items-center justify-center shadow-lg">
                                 <Play size={14} color="black" style={{ marginLeft: 2 }} fill="black" />
                             </View>

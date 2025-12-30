@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, RefreshControl, ScrollView, StatusBar, Image, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, TouchableOpacity, RefreshControl, ScrollView, StatusBar, Image, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Link, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TrendingUp, Users, BookOpen, Download, CheckCircle2, WifiOff, Trophy, ChevronRight } from 'lucide-react-native';
+import { TrendingUp, Users, BookOpen, Download, CheckCircle2, WifiOff, Trophy, ChevronRight, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // API & Libs
@@ -17,77 +17,78 @@ import { Book, UserRole } from './_types/book';
 
 // Componentes UI
 import { HeroBanner } from './_components/HeroBanner';
-import { GreetingHeader } from './_components/GreetingHeader';
+import { GreetingHeader } from './_components/GreetingHeader'; // Agora usa o componente completo
 import { BookDetailsModal } from './_components/BookDetailsModal';
 import { RankingCard } from './_components/RankingCard';
 import { WriterCallCard } from './_components/WriterCallCard';
 
-// --- COMPONENTES AUXILIARES (Do seu código original) ---
+const { width } = Dimensions.get('window');
 
-const SectionTitle = React.memo(({ title, icon: Icon, color = "#10b981", onPress }: { title: string, icon: any, color?: string, onPress?: () => void }) => (
-    <View className="px-6 flex-row items-center justify-between mb-4 mt-8">
-        <View className="flex-row items-center gap-2">
-            <Icon size={20} color={color} />
-            <Text className="text-white font-bold text-xl tracking-tight">{title}</Text>
+// --- COMPONENTES VISUAIS ---
+
+const SectionHeader = React.memo(({ title, subtitle, icon: Icon, color = "#10b981", onPress }: { title: string, subtitle?: string, icon?: any, color?: string, onPress?: () => void }) => (
+    <View className="px-6 flex-row items-end justify-between mb-5 mt-8">
+        <View>
+            <View className="flex-row items-center gap-2 mb-1">
+                {Icon && <Icon size={18} color={color} />}
+                <Text className="text-zinc-400 text-xs font-bold uppercase tracking-widest">{subtitle || 'Seção'}</Text>
+            </View>
+            <Text className="text-white font-black text-2xl tracking-tight leading-7">{title}</Text>
         </View>
         {onPress && (
-            <TouchableOpacity onPress={onPress}>
-                <Text className="text-zinc-500 text-xs font-bold uppercase">Ver tudo</Text>
+            <TouchableOpacity onPress={onPress} className="bg-zinc-800/50 px-3 py-1.5 rounded-full flex-row items-center border border-zinc-700">
+                <Text className="text-zinc-300 text-xs font-bold mr-1">Ver todos</Text>
+                <ChevronRight size={12} color="#d4d4d8" />
             </TouchableOpacity>
         )}
     </View>
 ));
 
-const BookCardSmall = React.memo(({ book, onPress }: { book: Book, onPress: (book: Book) => void }) => (
-    <TouchableOpacity onPress={() => onPress(book)} activeOpacity={0.7} className="mr-4 w-32 group">
-        <View className="w-32 h-48 rounded-xl bg-zinc-800 overflow-hidden mb-2 relative border border-white/5 shadow-md">
+const ModernBookCard = React.memo(({ book, onPress, showProgress = true }: { book: Book, onPress: (book: Book) => void, showProgress?: boolean }) => (
+    <TouchableOpacity onPress={() => onPress(book)} activeOpacity={0.8} className="mr-4 w-[140px]">
+        <View className="w-[140px] h-[210px] rounded-2xl bg-zinc-800 overflow-hidden mb-3 relative border border-zinc-700/50 shadow-xl shadow-black/50">
             {book.coverUrl ? (
                 <Image source={{ uri: book.coverUrl }} className="w-full h-full" resizeMode="cover" />
             ) : (
-                <View className="w-full h-full items-center justify-center bg-zinc-800"><BookOpen color="#52525b" /></View>
+                <View className="w-full h-full items-center justify-center bg-zinc-800 relative">
+                    <LinearGradient colors={['#27272a', '#18181b']} className="absolute inset-0" />
+                    <BookOpen color="#52525b" size={40} />
+                    <Text className="text-zinc-500 text-xs text-center px-2 mt-2 font-medium" numberOfLines={3}>{book.title}</Text>
+                </View>
             )}
-
-            {/* Barra de Progresso (Adicionado para visualização rápida) */}
-            {(book.progress || 0) > 0 && (
-                <View className="absolute bottom-0 w-full h-1 bg-black/50">
-                    <View className="h-full bg-emerald-500" style={{ width: `${book.progress}%` }} />
+            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} className="absolute bottom-0 w-full h-1/3" />
+            
+            {showProgress && (book.progress || 0) > 0 && (
+                <View className="absolute bottom-0 w-full h-1.5 bg-zinc-900/50">
+                    <View className="h-full bg-emerald-500 rounded-r-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${book.progress}%` }} />
                 </View>
             )}
 
             {book.isDownloading && (
-                <View className="absolute inset-0 bg-black/70 items-center justify-center">
-                    <ActivityIndicator color="#10b981" />
-                    <Text className="text-white text-[10px] font-bold mt-1">{Math.round(book.downloadProgress || 0)}%</Text>
+                <View className="absolute inset-0 bg-black/60 backdrop-blur-[2px] items-center justify-center">
+                    <ActivityIndicator color="#10b981" size="large" />
+                    <Text className="text-emerald-400 text-xs font-black mt-2">{Math.round(book.downloadProgress || 0)}%</Text>
                 </View>
             )}
 
-            {!book.isDownloading && book.isDownloaded && (
-                <View className="absolute top-2 right-2 bg-black/60 p-1.5 rounded-full backdrop-blur-sm">
-                    <CheckCircle2 size={12} color="#10b981" />
-                </View>
-            )}
-            
-            {!book.isDownloading && !book.isDownloaded && (
-                <View className="absolute top-2 right-2 bg-black/60 p-1.5 rounded-full backdrop-blur-sm">
-                    <Download size={12} color="white" />
-                </View>
-            )}
+            <View className="absolute top-2 right-2 flex-row gap-1">
+                {!book.isDownloading && book.isDownloaded ? (
+                    <View className="bg-emerald-500/20 p-1.5 rounded-full border border-emerald-500/30 backdrop-blur-md">
+                        <CheckCircle2 size={10} color="#34d399" strokeWidth={3} />
+                    </View>
+                ) : !book.isDownloading && (
+                    <View className="bg-black/40 p-1.5 rounded-full backdrop-blur-md">
+                        <Download size={10} color="white" />
+                    </View>
+                )}
+            </View>
         </View>
-        <Text className="text-zinc-200 font-bold text-sm leading-4 mb-0.5" numberOfLines={2}>{book.title}</Text>
-
-        <View className="flex-row items-center justify-between">
-            <Text className="text-zinc-500 text-xs flex-1" numberOfLines={1}>{book.author}</Text>
-            {(book.downloadsCount ?? 0) > 0 && (
-                <View className="flex-row items-center gap-0.5 ml-1">
-                    <Download size={8} color="#71717a" />
-                    <Text className="text-[10px] text-zinc-500">{book.downloadsCount}</Text>
-                </View>
-            )}
-        </View>
+        <Text className="text-white font-bold text-sm leading-5" numberOfLines={2}>{book.title}</Text>
+        <Text className="text-zinc-500 text-xs font-medium mt-0.5" numberOfLines={1}>{book.author}</Text>
     </TouchableOpacity>
 ));
 
-// --- DASHBOARD ---
+// --- DASHBOARD PRINCIPAL ---
 
 export default function Dashboard() {
     const { user } = useAuthStore();
@@ -102,16 +103,12 @@ export default function Dashboard() {
     const [selectedBook, setSelectedBook] = useState<Book | null>(null);
     const [modalVisible, setModalVisible] = useState(false);
 
-    // --- BUSCA DE DADOS (Lógica Antiga Preservada) ---
+    // --- CARREGAMENTO ---
     const fetchBooks = useCallback(async () => {
         if (!user) return;
-        if (isConnected === false) {
-            setLoading(false);
-            return;
-        }
+        if (isConnected === false) { setLoading(false); return; }
 
         try {
-            // Adiciona timestamp para evitar cache da API
             const response = await api.get(`/mobile/books?_t=${Date.now()}`);
             const apiBooks = Array.isArray(response.data) ? response.data : [];
 
@@ -122,14 +119,6 @@ export default function Dashboard() {
                 const rawRole = book.userRole || 'USER';
                 const safeRole: UserRole = (rawRole === 'ADMIN' || rawRole === 'USER') ? rawRole : 'USER';
 
-                const mockOwner = {
-                    id: book.userId || 'unknown',
-                    name: book.userName || 'Readeek',
-                    image: book.userImage || null,
-                    role: safeRole
-                };
-
-                // --- LÓGICA DE SINCRONIZAÇÃO DE PROGRESSO ---
                 let localCfi = null;
                 let localTimestamp = 0;
                 let localProgress = book.progress || 0;
@@ -139,18 +128,12 @@ export default function Dashboard() {
                         localCfi = await AsyncStorage.getItem(`@progress:${book.id}`);
                         const tsStr = await AsyncStorage.getItem(`@last_read:${book.id}`);
                         const pctStr = await AsyncStorage.getItem(`@percent:${book.id}`);
-                        
                         localTimestamp = tsStr ? parseInt(tsStr, 10) : 0;
-
-                        if (localCfi && localCfi !== book.currentLocation) {
-                            // Prioriza local
-                        }
-                        
                         if (pctStr) {
                             const pct = parseFloat(pctStr);
                             if (pct * 100 > localProgress) localProgress = pct * 100;
                         }
-                    } catch (e) { /* silent */ }
+                    } catch (e) { }
                 }
 
                 const apiDate = book.updatedAt ? new Date(book.updatedAt).getTime() : 0;
@@ -158,13 +141,13 @@ export default function Dashboard() {
 
                 return {
                     ...book,
-                    owner: mockOwner,
+                    owner: { id: book.userId || 'unknown', name: book.userName || 'Readeek', image: book.userImage || null, role: safeRole },
                     downloadsCount: book.downloadsCount || 0,
                     description: book.description || null,
                     isDownloaded,
                     isDownloading: false,
                     downloadProgress: 0,
-                    progress: localProgress, // Usa o progresso calculado
+                    progress: localProgress,
                     currentLocation: localCfi || book.currentLocation,
                     updatedAt: finalDate
                 };
@@ -172,9 +155,7 @@ export default function Dashboard() {
 
             setAllBooks(processedBooks);
         } catch (error: any) {
-            if (error.response?.status !== 401) {
-                console.error("Erro ao carregar dashboard:", error);
-            }
+            if (error.response?.status !== 401) console.error("Erro dashboard:", error);
         } finally {
             setLoading(false);
         }
@@ -183,15 +164,10 @@ export default function Dashboard() {
     const loadTopRanking = async () => {
         try {
             const data = await getRanking();
-            if (Array.isArray(data)) {
-                setTopUsers(data.slice(0, 5));
-            }
-        } catch (error) {
-            console.error("Erro ao carregar ranking", error);
-        }
+            if (Array.isArray(data)) setTopUsers(data.slice(0, 5));
+        } catch (error) { }
     };
 
-    // --- ATUALIZAÇÃO AUTOMÁTICA (O segredo do reload automático) ---
     useFocusEffect(
         useCallback(() => {
             if (user) {
@@ -203,45 +179,35 @@ export default function Dashboard() {
 
     const onRefresh = async () => {
         setRefreshing(true);
+        // Não precisamos recarregar notificações aqui, o GreetingHeader faz isso sozinho
         await Promise.all([fetchBooks(), loadTopRanking()]);
         setRefreshing(false);
     };
 
-    // Filtros Memoized
+    // --- FILTROS & LÓGICA ---
     const { featuredBooks, rankingBooks, communityBooks, myBooks } = useMemo(() => {
         if (!user) return { featuredBooks: [], rankingBooks: [], communityBooks: [], myBooks: [] };
-
         const my = allBooks.filter(b => b.isDownloaded || (b.userId === user?.id && b.progress > 0));
         const featured = allBooks.filter(b => b.owner?.role === 'ADMIN');
         const community = allBooks.filter(b => !b.isDownloaded && b.owner?.role !== 'ADMIN' && b.userId !== user?.id);
         const ranking = [...allBooks].sort((a, b) => (b.downloadsCount || 0) - (a.downloadsCount || 0)).slice(0, 5);
-
         return { featuredBooks: featured, rankingBooks: ranking, communityBooks: community, myBooks: my };
     }, [allBooks, user]);
 
-    // Lógica de "Último Livro" (Header)
     const lastReadBook = useMemo(() => {
         if (!user || allBooks.length === 0) return null;
-
         const startedBooks = allBooks.filter(b => b.userId === user.id && b.progress > 0);
-
         startedBooks.sort((a, b) => {
             const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
             const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
             return dateB - dateA;
         });
-
         return startedBooks.length > 0 ? startedBooks[0] : null;
     }, [allBooks, user]);
 
-
-    // --- HANDLERS ---
-
     const updateBookState = (id: string, updates: Partial<Book>) => {
         setAllBooks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-        if (selectedBook?.id === id) {
-            setSelectedBook(prev => prev ? { ...prev, ...updates } : null);
-        }
+        if (selectedBook?.id === id) setSelectedBook(prev => prev ? { ...prev, ...updates } : null);
     };
 
     const handleBookPress = useCallback((book: Book) => {
@@ -250,16 +216,8 @@ export default function Dashboard() {
     }, []);
 
     const handleContinueReading = useCallback(async (book: any) => {
-        // Salva timestamp para que ele apareça em primeiro ao voltar
         await AsyncStorage.setItem(`@last_read:${book.id}`, Date.now().toString());
-
-        router.push({
-            pathname: `/read/${book.id}`,
-            params: {
-                author: book.author || '',
-                hasCover: book.coverUrl ? 'true' : 'false'
-            }
-        });
+        router.push({ pathname: `/read/${book.id}`, params: { author: book.author || '', hasCover: book.coverUrl ? 'true' : 'false' } });
     }, [router]);
 
     const handleModalAction = async (book: Book) => {
@@ -269,20 +227,16 @@ export default function Dashboard() {
         } else {
             try {
                 updateBookState(book.id, { isDownloading: true });
-
                 const targetBookId = await registerDownload(book.id);
-                if (!targetBookId) throw new Error("Falha ao obter ID do livro.");
-
+                if (!targetBookId) throw new Error("Falha ao obter ID.");
                 await fileManager.downloadBook(book.filePath, targetBookId, (progress) => {
                     updateBookState(book.id, { downloadProgress: progress });
                 });
-
                 Alert.alert("Sucesso", "Livro adicionado à sua biblioteca!");
                 setModalVisible(false);
                 onRefresh();
-
             } catch (error) {
-                Alert.alert("Erro", "Falha ao baixar o livro. Verifique sua conexão.");
+                Alert.alert("Erro", "Falha ao baixar.");
                 updateBookState(book.id, { isDownloading: false });
             }
         }
@@ -290,52 +244,24 @@ export default function Dashboard() {
 
     // --- RENDERIZAÇÃO ---
 
-    // UI OFFLINE
     if (isConnected === false) {
         return (
-            <View className="flex-1 bg-zinc-950">
-                <StatusBar barStyle="light-content" />
-                <SafeAreaView className="flex-1">
-                    <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-                        <View className="px-6 pt-2 pb-6 flex-row items-center gap-3">
-                            <View className="w-12 h-12 rounded-full bg-zinc-800 items-center justify-center border border-zinc-700">
-                                <Text className="text-white font-bold text-lg">{user?.name?.[0]}</Text>
-                            </View>
-                            <View>
-                                <Text className="text-zinc-400 text-xs">Modo Offline</Text>
-                                <Text className="text-white font-bold text-lg">{user?.name?.split(' ')[0]}</Text>
-                            </View>
-                        </View>
-
-                        <View className="flex-1 px-6 items-center justify-center -mt-20">
-                            <View className="w-full bg-zinc-900/80 border border-zinc-800 p-8 rounded-3xl items-center shadow-lg">
-                                <WifiOff size={32} color="#ef4444" style={{ marginBottom: 20 }} />
-                                <Text className="text-white font-black text-2xl text-center mb-2">Você está offline</Text>
-                                <Text className="text-zinc-400 text-center text-base mb-8 leading-6">
-                                    O feed, rankings e downloads estão indisponíveis. Mas não se preocupe, seus livros baixados estão prontos.
-                                </Text>
-                                <TouchableOpacity
-                                    className="w-full bg-emerald-600 py-4 rounded-xl flex-row items-center justify-center shadow-lg shadow-emerald-900/20"
-                                    onPress={() => router.push('/(app)/library')}
-                                    activeOpacity={0.8}
-                                >
-                                    <BookOpen size={20} color="white" style={{ marginRight: 10 }} />
-                                    <Text className="text-white font-bold text-lg uppercase tracking-wide">Ir para Biblioteca</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </ScrollView>
-                </SafeAreaView>
+            <View className="flex-1 bg-zinc-950 items-center justify-center p-6">
+                <WifiOff size={48} color="#ef4444" className="mb-4" />
+                <Text className="text-white font-black text-2xl text-center">Modo Offline</Text>
+                <Text className="text-zinc-400 text-center mt-2 mb-8">Conecte-se à internet para ver novidades. Seus livros baixados estão na biblioteca.</Text>
+                <TouchableOpacity onPress={() => router.push('/(app)/library')} className="bg-emerald-600 px-8 py-3 rounded-full">
+                    <Text className="text-white font-bold">Ir para Biblioteca</Text>
+                </TouchableOpacity>
             </View>
         );
     }
 
-    // UI LOADING
     if (loading && allBooks.length === 0) {
         return (
             <View className="flex-1 bg-black items-center justify-center">
                 <ActivityIndicator size="large" color="#10b981" />
-                <Text className="text-zinc-500 text-xs mt-4 animate-pulse">Sincronizando biblioteca...</Text>
+                <Text className="text-zinc-500 text-xs mt-4 animate-pulse">Carregando estante...</Text>
             </View>
         );
     }
@@ -343,51 +269,70 @@ export default function Dashboard() {
     return (
         <View className="flex-1 bg-black">
             <StatusBar barStyle="light-content" />
-
-            {/* Background Gradient Sutil */}
-            <View className="absolute top-0 left-0 right-0 h-[600px] pointer-events-none">
-                <LinearGradient colors={['#022c22', '#000000']} className="w-full h-full opacity-60" />
+            <View className="absolute top-0 left-0 right-0 h-[500px]">
+                <LinearGradient colors={['#1e1b4b', '#000000']} className="w-full h-full opacity-40" />
             </View>
 
             <SafeAreaView className="flex-1" edges={['top']}>
                 <ScrollView
-                    contentContainerStyle={{ paddingBottom: 100 }}
+                    contentContainerStyle={{ paddingBottom: 120 }}
                     showsVerticalScrollIndicator={false}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10b981" />}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
                 >
-                    {/* 1. Header com "Continuar Lendo" Atualizado */}
+                    {/* O GreetingHeader agora contém o Header + Continue Reading */}
                     <GreetingHeader
                         user={user}
                         lastReadBook={lastReadBook}
                         onContinueReading={handleContinueReading}
                     />
 
-                    {/* 2. Novo Card de Escritor (Inserido Aqui) */}
-                    <WriterCallCard />
+                    {/* Destaques (Hero) */}
+                    <View className="mt-2">
+                        <HeroBanner
+                            books={featuredBooks.length > 0 ? featuredBooks.slice(0, 5) : allBooks.slice(0, 3)}
+                            onPress={handleBookPress}
+                        />
+                    </View>
 
-                    {/* 3. Banner de Destaques */}
-                    <HeroBanner
-                        books={featuredBooks.length > 0 ? featuredBooks.slice(0, 5) : allBooks.slice(0, 3)}
-                        onPress={handleBookPress}
-                    />
+                    {/* Minha Estante */}
+                    {myBooks.length > 0 && (
+                        <View>
+                            <SectionHeader 
+                                title="Minha Biblioteca" 
+                                subtitle="Continue de onde parou" 
+                                icon={BookOpen} 
+                                color="#818cf8"
+                                onPress={() => router.push('/(app)/library')}
+                            />
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                                {myBooks.map((book) => (
+                                    <ModernBookCard key={book.id} book={book} onPress={handleBookPress} showProgress />
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )}
 
-                    {/* 4. Ranking de Leitores */}
+                    {/* CTA para Escritores */}
+                    <View className="mt-8 mb-4">
+                        <WriterCallCard />
+                    </View>
+
+                    {/* Ranking */}
                     {topUsers.length > 0 && (
-                        <View className="mt-6 mb-2">
-                            <View className="px-6 flex-row justify-between items-center mb-4">
-                                <View className="flex-row items-center gap-2">
-                                    <Trophy size={20} color="#fbbf24" />
-                                    <Text className="text-white font-bold text-xl tracking-tight">Top Leitores</Text>
-                                </View>
-                                <Link href="/(app)/ranking" asChild>
-                                    <TouchableOpacity className="flex-row items-center">
-                                        <Text className="text-emerald-500 font-bold text-xs uppercase mr-1">Ver Ranking</Text>
-                                        <ChevronRight size={16} color="#10b981" />
-                                    </TouchableOpacity>
-                                </Link>
-                            </View>
-
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }} snapToAlignment="start" decelerationRate="fast">
+                        <View className="relative">
+                            <LinearGradient 
+                                colors={['transparent', 'rgba(251, 191, 36, 0.05)', 'transparent']} 
+                                start={{x:0, y:0}} end={{x:1, y:0}}
+                                className="absolute inset-0 h-full w-full"
+                            />
+                            <SectionHeader 
+                                title="Hall da Fama" 
+                                subtitle="Leitores mais ativos" 
+                                icon={Trophy} 
+                                color="#fbbf24"
+                                onPress={() => router.push('/(app)/ranking')} 
+                            />
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
                                 {topUsers.map((user, index) => (
                                     <RankingCard key={user.id} user={user} position={index + 1} />
                                 ))}
@@ -395,45 +340,45 @@ export default function Dashboard() {
                         </View>
                     )}
 
-                    {/* 5. Minha Estante */}
-                    {myBooks.length > 0 && (
-                        <View>
-                            <SectionTitle title="Minha Estante" icon={BookOpen} />
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }} snapToAlignment="start" decelerationRate="fast">
-                                {myBooks.map((book) => (
-                                    <BookCardSmall key={book.id} book={book} onPress={handleBookPress} />
-                                ))}
-                            </ScrollView>
-                        </View>
-                    )}
-
-                    {/* 6. Mais Baixados */}
+                    {/* Tendências */}
                     <View>
-                        <SectionTitle title="Mais Baixados" icon={TrendingUp} color="#facc15" />
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }} snapToAlignment="start" decelerationRate="fast">
+                        <SectionHeader title="Em Alta" subtitle="Tendências da semana" icon={TrendingUp} color="#f472b6" />
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
                             {rankingBooks.map((book, index) => (
                                 <View key={book.id} className="mr-4 relative">
-                                    <Text className="absolute -left-2 -bottom-4 text-[80px] font-black text-white/5 z-0 leading-none">{index + 1}</Text>
-                                    <BookCardSmall book={book} onPress={handleBookPress} />
+                                    <Text className="absolute -left-4 -bottom-6 text-[90px] font-black text-white/5 z-0 leading-none italic">
+                                        {index + 1}
+                                    </Text>
+                                    <ModernBookCard book={book} onPress={handleBookPress} />
                                 </View>
                             ))}
                         </ScrollView>
                     </View>
 
-                    {/* 7. Comunidade */}
+                    {/* Comunidade */}
                     <View>
-                        <SectionTitle title="Comunidade" icon={Users} color="#60a5fa" />
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }} snapToAlignment="start" decelerationRate="fast">
-                            {communityBooks.map((book) => (
-                                <BookCardSmall key={book.id} book={book} onPress={handleBookPress} />
-                            ))}
-                            {communityBooks.length === 0 && (
-                                <Text className="text-zinc-500 italic">Tudo atualizado por aqui.</Text>
+                        <SectionHeader 
+                            title="Comunidade" 
+                            subtitle="Obras de autores independentes" 
+                            icon={Users} 
+                            color="#34d399" 
+                            onPress={() => router.push('/(app)/community')}
+                        />
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
+                            {communityBooks.length > 0 ? (
+                                communityBooks.map((book) => (
+                                    <ModernBookCard key={book.id} book={book} onPress={handleBookPress} />
+                                ))
+                            ) : (
+                                <View className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[300px] flex-row items-center gap-4">
+                                    <Sparkles size={24} color="#71717a" />
+                                    <Text className="text-zinc-500 text-sm flex-1">
+                                        Você explorou tudo! Novas obras da comunidade aparecerão aqui em breve.
+                                    </Text>
+                                </View>
                             )}
                         </ScrollView>
                     </View>
-
-                    <View className="h-8" />
                 </ScrollView>
             </SafeAreaView>
 
