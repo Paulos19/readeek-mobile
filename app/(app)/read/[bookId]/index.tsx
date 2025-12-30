@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, ActivityIndicator, StatusBar, Text, ToastAndroid, Platform, Pressable } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
@@ -8,12 +8,17 @@ import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-ha
 import { useReader, THEMES } from './_hooks/useReader';
 import { generateReaderHTML } from './_utils/htmlGenerator';
 import { ReaderMenu } from './_components/ReaderMenu';
-import { HighlightMenu } from './_components/HighlightMenu';
-import { repairBookMetadata } from 'lib/api';
+import { SelectionMenu } from './_components/SelectionMenu';
+import { HighlightShareModal } from './_components/HighlightShareModal';
+import { repairBookMetadata, Highlight } from '../../../../lib/api';
 
 export default function ReaderPage() {
   const { bookId, author, hasCover, title } = useLocalSearchParams<{ bookId: string, author?: string, hasCover?: string, title?: string }>();
   const { state, actions, refs, gestures } = useReader(bookId);
+
+  // States for sharing
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [highlightToShare, setHighlightToShare] = useState<Highlight | null>(null);
 
   useEffect(() => {
     const checkAndRepairMetadata = async () => {
@@ -28,6 +33,13 @@ export default function ReaderPage() {
     };
     if (bookId) checkAndRepairMetadata();
   }, [bookId, author, hasCover]);
+
+  const handleOpenShare = (highlight: Highlight) => {
+      setHighlightToShare(highlight);
+      setShareModalVisible(true);
+      // Optional: Minimize the menu for better visibility of the modal
+      actions.setMenuExpanded(false);
+  };
 
   const html = useMemo(() => {
       if (!state.bookBase64) return '';
@@ -62,7 +74,7 @@ export default function ReaderPage() {
           <GestureDetector gesture={gestures.pinchGesture}>
               <View style={{ flex: 1, position: 'relative' }}>
                   
-                  {/* Laterais Invisíveis para Navegação */}
+                  {/* Invisible Side Navigation Areas */}
                   <Pressable 
                     style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '20%', zIndex: 10, backgroundColor: 'transparent' }}
                     onPress={actions.prevPage}
@@ -82,11 +94,12 @@ export default function ReaderPage() {
                     scrollEnabled={false}
                     bounces={false}
                     onMessage={actions.handleMessage}
-                    onLoadEnd={actions.onWebViewLoaded} // <--- AQUI ESTÁ O GATILHO DA CORREÇÃO
+                    onLoadEnd={actions.onWebViewLoaded}
                   />
               </View>
           </GestureDetector>
 
+          {/* Main Reader Menu */}
           {state.menuVisible && (
               <ReaderMenu 
                   expanded={state.menuExpanded}
@@ -94,6 +107,7 @@ export default function ReaderPage() {
                   theme={THEMES[state.currentTheme]}
                   fontSize={state.fontSize}
                   toc={state.toc}
+                  previews={state.tocPreviews}
                   highlights={state.highlights}
                   progress={state.progress}
                   title={title || "Livro"}
@@ -106,15 +120,27 @@ export default function ReaderPage() {
                   onChangeTheme={actions.changeTheme}
                   onSelectChapter={actions.goToChapter}
                   onDeleteHighlight={actions.removeHighlight}
+                  onShareHighlight={handleOpenShare} // Connecting the share function
                   onClose={actions.toggleMenu}
               />
           )}
 
-          <HighlightMenu 
+          {/* AI Selection Menu */}
+          <SelectionMenu 
               visible={!!state.selection} 
+              text={state.selection?.text || ''} 
               onClose={() => actions.setSelection(null)}
-              onSelectColor={actions.addHighlight}
+              onHighlight={actions.addHighlight}
           />
+
+          {/* Share Modal */}
+          <HighlightShareModal 
+              visible={shareModalVisible}
+              highlight={highlightToShare}
+              bookTitle={title || "Livro"}
+              onClose={() => setShareModalVisible(false)}
+          />
+          
         </SafeAreaView>
     </GestureHandlerRootView>
   );

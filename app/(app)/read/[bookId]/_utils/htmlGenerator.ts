@@ -1,4 +1,4 @@
-import { Highlight } from 'lib/api';
+import { Highlight } from '../../../../../lib/api';
 
 interface HtmlParams {
     bookBase64: string;
@@ -9,6 +9,16 @@ interface HtmlParams {
 }
 
 export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, theme, fontSize }: HtmlParams) => {
+    
+    const highlightCSS = `
+        .highlight-yellow { background-color: rgba(250, 204, 21, 0.4); border-bottom: 2px solid #facc15; }
+        .highlight-green { background-color: rgba(74, 222, 128, 0.4); border-bottom: 2px solid #4ade80; }
+        .highlight-blue { background-color: rgba(96, 165, 250, 0.4); border-bottom: 2px solid #60a5fa; }
+        .highlight-purple { background-color: rgba(192, 132, 252, 0.4); border-bottom: 2px solid #c084fc; }
+        .highlight-red { background-color: rgba(248, 113, 113, 0.4); border-bottom: 2px solid #f87171; }
+        ::selection { background: rgba(99, 102, 241, 0.3); } 
+    `;
+
     return `
 <!DOCTYPE html>
 <html>
@@ -19,25 +29,22 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
     <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
     <style>
         body { 
-            margin: 0; 
-            padding: 0; 
-            background-color: ${theme.bg}; 
-            color: ${theme.text};
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            /* user-select removido para permitir o destaque de texto */
+            margin: 0; padding: 0; 
+            background-color: ${theme.bg}; color: ${theme.text};
+            font-family: 'Georgia', 'Times New Roman', serif; /* Fonte serifada para conforto */
+            height: 100vh; width: 100vw; overflow: hidden;
+            -webkit-user-select: text; user-select: text; -webkit-touch-callout: none; 
         }
-        #viewer {
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
+        #viewer { height: 100vh; width: 100vw; overflow: hidden; }
+        
+        /* Ajustes Globais para o Livro */
+        p { 
+            line-height: 1.6 !important; 
+            text-align: justify !important;
+            margin-bottom: 1em !important;
         }
-        .epubjs-hl-yellow { fill: yellow; fill-opacity: 0.3; mix-blend-mode: multiply; }
-        .epubjs-hl-red { fill: #ffadad; fill-opacity: 0.3; mix-blend-mode: multiply; }
-        .epubjs-hl-blue { fill: #a0c4ff; fill-opacity: 0.3; mix-blend-mode: multiply; }
-        .epubjs-hl-green { fill: #9bf6ff; fill-opacity: 0.3; mix-blend-mode: multiply; }
+        
+        ${highlightCSS}
     </style>
 </head>
 <body>
@@ -47,9 +54,7 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
             var binary_string = window.atob(base64);
             var len = binary_string.length;
             var bytes = new Uint8Array(len);
-            for (var i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
-            }
+            for (var i = 0; i < len; i++) { bytes[i] = binary_string.charCodeAt(i); }
             return bytes.buffer;
         }
 
@@ -57,27 +62,21 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
             var bookData = base64ToArrayBuffer("${bookBase64}");
             var book = ePub(bookData);
             
-            var rendition = book.renderTo("viewer", {
-                width: "100%",
-                height: "100%",
-                flow: "paginated",
-                manager: "default"
+            // Configurações de layout otimizadas
+            var rendition = book.renderTo("viewer", { 
+                width: "100%", 
+                height: "100%", 
+                flow: "paginated", 
+                manager: "default",
+                // Margens laterais para respiro
+                stylesheet: "body { padding: 0 20px !important; }" 
             });
 
             var locationToLoad = "${initialLocation || ''}";
-            if(locationToLoad && locationToLoad !== 'null') {
-                rendition.display(locationToLoad);
-            } else {
-                rendition.display();
-            }
+            if(locationToLoad && locationToLoad !== 'null') rendition.display(locationToLoad);
+            else rendition.display();
 
-            var themes = { 
-                fontSize: "${fontSize}%", 
-                body: { 
-                    "color": "${theme.text}", 
-                    "background": "${theme.bg}" 
-                } 
-            };
+            var themes = { fontSize: "${fontSize}%", body: { "color": "${theme.text}", "background": "${theme.bg}" } };
             rendition.themes.register("custom", themes);
             rendition.themes.select("custom");
 
@@ -85,24 +84,28 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
                 var currentHighlights = ${JSON.stringify(highlights)};
                 currentHighlights.forEach(function(hl) {
                     try {
-                        rendition.annotations.add('highlight', hl.cfiRange, {}, null, 'hl-' + hl.id);
+                        var colorClass = 'highlight-' + (hl.color || 'yellow');
+                        rendition.annotations.add('highlight', hl.cfiRange, {}, null, colorClass);
                     } catch(e) {}
                 });
 
                 rendition.on('selected', function(cfiRange, contents) {
-                    rendition.getRange(cfiRange).then(function(range) {
+                    book.getRange(cfiRange).then(function(range) {
                         if(range) {
                             var text = range.toString();
+                            
+                            // Calcula a posição Y da seleção (0 a 1, onde 0 é topo, 1 é base)
+                            var rect = range.getBoundingClientRect();
+                            var relativeY = rect.top / window.innerHeight;
+
                             window.ReactNativeWebView.postMessage(JSON.stringify({
                                 type: 'SELECTION',
                                 cfiRange: cfiRange,
-                                text: text
+                                text: text,
+                                y: relativeY // Envia posição vertical
                             }));
                         }
                     });
-                    if(contents && contents.window) {
-                        contents.window.getSelection().removeAllRanges();
-                    }
                 });
                 
                 rendition.on('markClicked', function(cfiRange, data, contents) {
@@ -110,6 +113,7 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
                 });
             });
 
+            // ... (restante do código igual: click, relocated, TOC, functions) ...
             rendition.on('click', function(e, contents) {
                 try {
                     var hasSelection = false;
@@ -117,9 +121,7 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
                         var sel = contents.window.getSelection();
                         if (sel && sel.toString().length > 0) hasSelection = true;
                     }
-
                     if (hasSelection) return;
-
                     e.preventDefault();
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOGGLE_UI' }));
                 } catch(err) {
@@ -128,35 +130,36 @@ export const generateReaderHTML = ({ bookBase64, initialLocation, highlights, th
             });
 
             rendition.on('relocated', function(location) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'LOC',
-                    cfi: location.start.cfi,
-                    percentage: location.start.percentage
-                }));
+                var percent = book.locations.percentageFromCfi(location.start.cfi);
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOC', cfi: location.start.cfi, percentage: percent }));
             });
 
-            // CORREÇÃO DO SUMÁRIO (TOC)
             book.loaded.navigation.then(function(nav) {
-                // 'nav' é o objeto Navigation, a lista de capítulos está em 'nav.toc'
                 var tocArray = (nav && nav.toc) ? nav.toc : [];
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'TOC',
-                    toc: tocArray
-                }));
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOC', toc: tocArray }));
             });
 
-            window.setFontSize = function(size) {
-                rendition.themes.fontSize(size + "%");
-            };
-
+            window.setFontSize = function(size) { rendition.themes.fontSize(size + "%"); };
+            
             window.applyTheme = function(theme) {
-                rendition.themes.register("custom", { 
-                    body: { "color": theme.text, "background": theme.bg } 
-                });
+                rendition.themes.register("custom", { body: { "color": theme.text, "background": theme.bg } });
                 rendition.themes.select("custom");
                 document.body.style.backgroundColor = theme.bg;
                 document.body.style.color = theme.text;
             };
+
+            window.clearSelection = function() {
+                var sel = window.getSelection();
+                if(sel) sel.removeAllRanges();
+                var frames = document.getElementsByTagName('iframe');
+                for(var i=0; i<frames.length; i++) {
+                    var frameSel = frames[i].contentWindow.getSelection();
+                    if(frameSel) frameSel.removeAllRanges();
+                }
+            };
+
+            window.book = book;
+            window.rendition = rendition;
 
         } catch (error) {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOG', msg: error.toString() }));

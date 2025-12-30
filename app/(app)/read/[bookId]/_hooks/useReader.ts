@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
-import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -15,7 +15,7 @@ export const THEMES = {
     sepia: { name: 'Sépia', bg: '#f6f1d1', text: '#5f4b32', ui: 'light' }
 };
 
-// Script para paginação e comunicação
+// Script para paginação e comunicação de localização
 const LOCATION_GENERATION_SCRIPT = `
     if (window.book) {
         window.book.ready.then(() => {
@@ -39,6 +39,52 @@ const LOCATION_GENERATION_SCRIPT = `
     }
 `;
 
+// SCRIPT: Extrai texto dos capítulos em background para o Menu
+const TOC_PREVIEW_SCRIPT = `
+    async function generateTocPreviews() {
+        if (!window.book || !window.book.navigation) return;
+        
+        function flatten(items) {
+            return items.reduce((acc, item) => {
+                acc.push(item);
+                if (item.subitems) acc.push(...flatten(item.subitems));
+                return acc;
+            }, []);
+        }
+
+        const allItems = flatten(window.book.navigation.toc);
+        const previews = {};
+        
+        for (let i = 0; i < allItems.length; i++) {
+            const item = allItems[i];
+            try {
+                // Carrega o HTML do capítulo na memória sem exibir
+                const doc = await window.book.load(item.href);
+                if (doc && doc.body) {
+                    // Limpa quebras de linha e pega os primeiros 120 caracteres
+                    const text = doc.body.innerText.replace(/\\s+/g, ' ').trim().substring(0, 120);
+                    previews[item.href] = text;
+                }
+            } catch (e) {
+                console.log('Erro preview:', item.href);
+            }
+
+            // Envia em lotes para não travar a UI
+            if (i % 3 === 0 || i === allItems.length - 1) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'TOC_PREVIEWS',
+                    data: previews
+                }));
+                await new Promise(r => setTimeout(r, 50));
+            }
+        }
+    }
+    
+    window.book.ready.then(() => {
+        setTimeout(generateTocPreviews, 2000); // Delay para não competir com render inicial
+    });
+`;
+
 const flattenToc = (items: any[]): any[] => {
     if (!items || !Array.isArray(items)) return [];
     return items.reduce((acc, item) => {
@@ -59,7 +105,6 @@ export function useReader(rawBookId: string | string[]) {
     const webviewRef = useRef<WebView>(null);
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const navigatingRef = useRef(false);
-    
     const latestProgressRef = useRef<{ cfi: string, pct: number } | null>(null);
 
     const bookId = Array.isArray(rawBookId) ? rawBookId[0] : rawBookId;
@@ -69,19 +114,22 @@ export function useReader(rawBookId: string | string[]) {
     const [initialLocation, setInitialLocation] = useState<string | null>(null);
     const [highlights, setHighlights] = useState<Highlight[]>([]);
     const [toc, setToc] = useState<any[]>([]);
+    const [tocPreviews, setTocPreviews] = useState<Record<string, string>>({}); 
     const [progress, setProgress] = useState(0);
     const [bookMeta, setBookMeta] = useState<any>(null);
 
-    // UI
+    // UI States
     const [menuVisible, setMenuVisible] = useState(false);
     const [menuExpanded, setMenuExpanded] = useState(false);
     const [activeTab, setActiveTab] = useState<'settings' | 'chapters' | 'highlights'>('settings');
+    
+    // ATUALIZADO: Agora armazenamos também 'y' para posicionar o menu
+    const [selection, setSelection] = useState<{ cfiRange: string; text: string; y: number } | null>(null);
     
     // Configurações
     const [fontSize, setFontSize] = useState(100);
     const fontSizeSv = useSharedValue(100); 
     const [currentTheme, setCurrentTheme] = useState<'dark' | 'light' | 'sepia'>('dark');
-    const [selection, setSelection] = useState<{ cfiRange: string; text: string } | null>(null);
 
     useEffect(() => {
         navigation.setOptions({ tabBarStyle: { display: 'none' }, headerShown: false });
@@ -89,19 +137,19 @@ export function useReader(rawBookId: string | string[]) {
 
     useEffect(() => { fontSizeSv.value = fontSize; }, [fontSize]);
 
+    // Salvar progresso ao desmontar
     useEffect(() => {
         return () => {
             if (latestProgressRef.current) {
                 const { cfi, pct } = latestProgressRef.current;
                 if (cfi && pct >= 0) {
-                    console.log(`[Reader] Salvando progresso ao sair: ${Math.round(pct * 100)}%`);
                     syncProgress(bookId, cfi, pct);
                 }
             }
         };
     }, [bookId]);
 
-    // LOAD PRINCIPAL
+    // LOAD DO LIVRO
     useEffect(() => {
         if (!bookId) { router.back(); return; }
 
@@ -109,62 +157,45 @@ export function useReader(rawBookId: string | string[]) {
             try {
                 setIsLoading(true);
 
-                // 1. Busca metadados atualizados da API (para garantir que temos o 'updatedAt' mais recente)
-                // Isso resolve o problema de stale data quando vem do Writer Studio
-                console.log("[Reader] Buscando metadados atualizados...");
+                // 1. Metadados
                 const res = await api.get('/mobile/books');
                 let currentBook = null;
-
                 if (res.data) {
-                    setBooks(res.data); // Atualiza cache global
+                    setBooks(res.data);
                     currentBook = res.data.find((b: any) => b.id === bookId);
                 } else {
-                    // Fallback para cache se API falhar (offline)
                     currentBook = books.find((b) => b.id === bookId);
                 }
 
-                if (!currentBook) throw new Error("Livro não encontrado na biblioteca.");
+                if (!currentBook) throw new Error("Livro não encontrado.");
                 setBookMeta(currentBook);
 
-                // 2. Lógica Inteligente de Cache do Arquivo
+                // 2. Arquivo Local e Cache
                 const localUri = `${FileSystem.documentDirectory}${bookId}.epub`;
                 const fileInfo = await FileSystem.getInfoAsync(localUri);
                 
                 let shouldDownload = !fileInfo.exists;
 
                 if (fileInfo.exists) {
-                    // Verifica se a versão do servidor é mais nova que o download local
                     const lastDownloadStr = await AsyncStorage.getItem(`@book_download_date:${bookId}`);
                     const lastDownloadTime = lastDownloadStr ? parseInt(lastDownloadStr) : 0;
                     const serverUpdateTime = new Date(currentBook.updatedAt).getTime();
 
-                    // Se o servidor for mais novo, força re-download
-                    if (serverUpdateTime > lastDownloadTime) {
-                        console.log(`[Reader] Atualização detectada. Local: ${lastDownloadTime}, Server: ${serverUpdateTime}`);
-                        shouldDownload = true;
-                    }
+                    if (serverUpdateTime > lastDownloadTime) shouldDownload = true;
                 }
 
                 if (shouldDownload) {
-                    if (!currentBook.filePath) throw new Error("URL do livro inválida.");
-                    console.log("[Reader] Baixando/Atualizando livro...", currentBook.filePath);
-                    
-                    // Remove arquivo antigo se existir para evitar corrupção
-                    if (fileInfo.exists) {
-                        await FileSystem.deleteAsync(localUri, { idempotent: true });
-                    }
-
+                    if (!currentBook.filePath) throw new Error("URL inválida.");
+                    if (fileInfo.exists) await FileSystem.deleteAsync(localUri, { idempotent: true });
                     await FileSystem.downloadAsync(currentBook.filePath, localUri);
-                    
-                    // Marca o timestamp deste download
                     await AsyncStorage.setItem(`@book_download_date:${bookId}`, Date.now().toString());
                 }
 
-                // 3. Leitura e Preparação
+                // 3. Leitura Base64
                 const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
                 setBookBase64(base64);
 
-                // 4. Carrega Preferências
+                // 4. Preferências e Progresso
                 const [savedSize, savedTheme, savedCfi, remoteHighlights] = await Promise.all([
                     AsyncStorage.getItem('@reader_fontsize'),
                     AsyncStorage.getItem('@reader_theme'),
@@ -178,12 +209,8 @@ export function useReader(rawBookId: string | string[]) {
                     fontSizeSv.value = size;
                 }
                 if (savedTheme) setCurrentTheme(savedTheme as any);
-                
-                if (savedCfi) {
-                    setInitialLocation(savedCfi);
-                } else if (currentBook.currentLocation) {
-                    setInitialLocation(currentBook.currentLocation);
-                }
+                if (savedCfi) setInitialLocation(savedCfi);
+                else if (currentBook.currentLocation) setInitialLocation(currentBook.currentLocation);
 
                 setHighlights(remoteHighlights);
 
@@ -196,8 +223,7 @@ export function useReader(rawBookId: string | string[]) {
                 });
 
             } catch (error: any) {
-                console.error("Reader Load Error:", error);
-                Alert.alert("Erro", error.message || "Falha ao carregar livro.");
+                Alert.alert("Erro", "Falha ao carregar livro.");
                 router.back();
             } finally { 
                 setIsLoading(false); 
@@ -206,6 +232,7 @@ export function useReader(rawBookId: string | string[]) {
         load();
     }, [bookId]);
 
+    // ACTIONS
     const changeFontSize = useCallback(async (newValue: number) => {
         const safeValue = Math.max(50, Math.min(250, Math.round(newValue)));
         setFontSize(prev => {
@@ -236,7 +263,6 @@ export function useReader(rawBookId: string | string[]) {
                         updateGlobalProgress(bookId, data.cfi, pct * 100);
 
                         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-                        
                         AsyncStorage.setItem(`@progress:${bookId}`, data.cfi);
                         AsyncStorage.setItem(`@percent:${bookId}`, pct.toString());
 
@@ -248,16 +274,37 @@ export function useReader(rawBookId: string | string[]) {
                 case 'TOC': 
                     setToc(flattenToc(data.toc)); 
                     break;
-                case 'SELECTION': setSelection({ cfiRange: data.cfiRange, text: data.text }); setMenuVisible(false); break;
-                case 'TOGGLE_UI': toggleMenu(); break;
-                case 'HIGHLIGHT_CLICKED': setMenuVisible(true); setMenuExpanded(true); setActiveTab('highlights'); break;
-                case 'LOG': console.log("[WebView Log]", data.msg); break;
+                case 'TOC_PREVIEWS': 
+                    setTocPreviews(prev => ({ ...prev, ...data.data }));
+                    break;
+                case 'SELECTION': 
+                    // ATUALIZADO: Salva a posição 'y' junto com o texto
+                    setSelection({ 
+                        cfiRange: data.cfiRange, 
+                        text: data.text,
+                        y: data.y || 0.5 // Default para meio se falhar
+                    }); 
+                    setMenuVisible(false); 
+                    break;
+                case 'TOGGLE_UI': 
+                    toggleMenu(); 
+                    break;
+                case 'HIGHLIGHT_CLICKED': 
+                    // Clicou num destaque existente: Abre menu de notas
+                    setMenuVisible(true); 
+                    setMenuExpanded(true); 
+                    setActiveTab('highlights'); 
+                    break;
+                case 'LOG': 
+                    console.log("[WebView Log]", data.msg); 
+                    break;
             }
         } catch (e) {}
     }, [bookId, menuVisible, fontSize]);
 
     const onWebViewLoaded = () => {
         webviewRef.current?.injectJavaScript(LOCATION_GENERATION_SCRIPT);
+        webviewRef.current?.injectJavaScript(TOC_PREVIEW_SCRIPT);
     };
 
     const toggleMenu = () => {
@@ -281,15 +328,23 @@ export function useReader(rawBookId: string | string[]) {
     const nextPage = () => navDebounce(() => webviewRef.current?.injectJavaScript('window.rendition.next()'));
     const prevPage = () => navDebounce(() => webviewRef.current?.injectJavaScript('window.rendition.prev()'));
 
+    // Adicionar Destaque com Cor
     const addHighlight = async (color: string) => {
          if (!selection) return;
+         
          const tempId = Math.random().toString(36).substr(2, 9);
          const newH = { id: tempId, cfiRange: selection.cfiRange, text: selection.text, color };
+         
          setHighlights(prev => [...prev, newH]);
+         
+         const className = `highlight-${color}`;
+         
+         // Injeta no WebView e limpa a seleção
          webviewRef.current?.injectJavaScript(`
-             window.rendition.annotations.add('highlight', '${selection.cfiRange}', {}, null, 'hl-${tempId}');
-             window.getSelection().removeAllRanges();
+             window.rendition.annotations.add('highlight', '${selection.cfiRange}', {}, null, '${className}');
+             window.clearSelection(); 
          `);
+         
          setSelection(null);
          try { await highlightService.create(bookId, selection.cfiRange, selection.text, color); } catch(e) {}
     };
@@ -306,8 +361,38 @@ export function useReader(rawBookId: string | string[]) {
     };
 
     return {
-        state: { isLoading, bookBase64, initialLocation, highlights, toc, fontSize, currentTheme, selection, menuVisible, menuExpanded, activeTab, progress, bookMeta },
-        actions: { setMenuVisible, setMenuExpanded, setActiveTab, toggleMenu, changeTheme, changeFontSize, goToChapter, nextPage, prevPage, addHighlight, removeHighlight, handleMessage, setSelection, onWebViewLoaded },
+        state: { 
+            isLoading, 
+            bookBase64, 
+            initialLocation, 
+            highlights, 
+            toc, 
+            tocPreviews,
+            fontSize, 
+            currentTheme, 
+            selection, 
+            menuVisible, 
+            menuExpanded, 
+            activeTab, 
+            progress, 
+            bookMeta 
+        },
+        actions: { 
+            setMenuVisible, 
+            setMenuExpanded, 
+            setActiveTab, 
+            toggleMenu, 
+            changeTheme, 
+            changeFontSize, 
+            goToChapter, 
+            nextPage, 
+            prevPage, 
+            addHighlight, 
+            removeHighlight, 
+            handleMessage, 
+            setSelection, 
+            onWebViewLoaded 
+        },
         refs: { webviewRef },
         gestures: { pinchGesture }
     };
