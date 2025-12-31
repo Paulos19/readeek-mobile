@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, TextInput, Switch, Image, Alert, ActivityIndicator } from 'react-native';
-import { X, List, Hash, Clock, Book, ToggleLeft, Save, UploadCloud } from 'lucide-react-native';
+import { X, List, Hash, Clock, Book, ToggleLeft, Save, UploadCloud, Sparkles, Image as ImageIcon } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { SlideInDown, Easing } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
-import { api } from '../../../../../lib/api';
+import { CoverGeneratorModal } from './CoverGeneratorModal'; // Importando o modal criado
+import { api } from 'lib/api';
 
 interface DraftSettingsModalProps {
   visible: boolean;
   onClose: () => void;
   draft: any;
-  onUpdate: () => void; // Callback para atualizar o pai
+  onUpdate: () => void;
 }
 
 export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftSettingsModalProps) => {
@@ -25,6 +26,9 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
   
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Controle do Modal de IA
+  const [showAiGenerator, setShowAiGenerator] = useState(false);
 
   // Sincroniza dados quando o draft muda
   useEffect(() => {
@@ -39,7 +43,30 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
   const totalWords = draft?.chapters?.reduce((acc: number, ch: any) => acc + (ch.content?.split(/\s+/).length || 0), 0) || 0;
   const readTime = Math.ceil(totalWords / 200);
 
-  // --- LÓGICA DE UPLOAD DE CAPA ---
+  // --- LÓGICA DE INTERAÇÃO DA CAPA ---
+  const handleCoverPress = () => {
+    Alert.alert(
+      "Definir Capa",
+      "Como você deseja adicionar a capa do seu livro?",
+      [
+        { 
+          text: "Cancelar", 
+          style: "cancel" 
+        },
+        { 
+          text: "Galeria", 
+          onPress: handlePickCover,
+          style: "default"
+        },
+        { 
+          text: "✨ Gerar com IA (1500 Créditos)", 
+          onPress: () => setShowAiGenerator(true),
+          style: "default"
+        }
+      ]
+    );
+  };
+
   const handlePickCover = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -65,7 +92,7 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
             headers: { 'Content-Type': 'multipart/form-data' }
         });
 
-        setCoverUrl(res.data.url); // Atualiza visualmente
+        setCoverUrl(res.data.url); 
     } catch (e) {
         Alert.alert("Erro", "Falha no upload da capa.");
     } finally {
@@ -73,7 +100,16 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
     }
   };
 
-  // --- SALVAR ALTERAÇÕES ---
+  // Callback quando a IA termina de gerar e o usuário escolhe uma capa
+  const handleAiCoverSelected = (newUrl: string) => {
+      setCoverUrl(newUrl);
+      // Opcional: Já salvar no banco imediatamente ou esperar o botão "Salvar" geral
+      // Aqui estamos apenas atualizando o estado visual, o usuário precisa clicar em "Salvar Alterações" para persistir no draft geral, 
+      // ou se o modal da IA já salvou no banco, este estado serve para refletir na UI.
+      // No código do modal da IA anterior, ele já chama '/mobile/writer/ai/covers/save', então já está salvo no banco.
+  };
+
+  // --- SALVAR ALTERAÇÕES GERAIS ---
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -82,7 +118,7 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
             genre,
             coverUrl
         });
-        onUpdate(); // Atualiza a tela anterior
+        onUpdate();
         onClose();
     } catch (e) {
         Alert.alert("Erro", "Falha ao salvar alterações.");
@@ -121,7 +157,7 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
             
             <Text className="text-zinc-500 text-xs font-bold uppercase mb-2">Capa</Text>
             <TouchableOpacity 
-                onPress={handlePickCover}
+                onPress={handleCoverPress}
                 className="bg-zinc-900 h-48 w-32 self-center rounded-xl border border-dashed border-zinc-700 items-center justify-center mb-6 overflow-hidden relative"
             >
                 {isUploading ? (
@@ -130,7 +166,7 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
                     <>
                         <Image source={{ uri: coverUrl }} className="w-full h-full opacity-80" resizeMode="cover" />
                         <View className="absolute bg-black/50 inset-0 items-center justify-center">
-                            <UploadCloud color="white" size={24} />
+                            <Sparkles color="white" size={24} />
                         </View>
                     </>
                 ) : (
@@ -225,70 +261,81 @@ export const DraftSettingsModal = ({ visible, onClose, draft, onUpdate }: DraftS
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/60">
-        <Animated.View 
-            // Animação suavizada (sem spring)
-            entering={SlideInDown.duration(300).easing(Easing.out(Easing.quad))}
-            className="bg-zinc-950 rounded-t-[32px] h-[85%] border-t border-zinc-800"
-        >
-            {/* Handle */}
-            <View className="items-center pt-3 pb-2">
-                <View className="w-12 h-1 bg-zinc-800 rounded-full" />
-            </View>
+    <>
+        <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <View className="flex-1 justify-end bg-black/60">
+            <Animated.View 
+                entering={SlideInDown.duration(300).easing(Easing.out(Easing.quad))}
+                className="bg-zinc-950 rounded-t-[32px] h-[85%] border-t border-zinc-800"
+            >
+                {/* Handle */}
+                <View className="items-center pt-3 pb-2">
+                    <View className="w-12 h-1 bg-zinc-800 rounded-full" />
+                </View>
 
-            {/* Header */}
-            <View className="px-6 pb-4 flex-row justify-between items-center border-b border-zinc-900">
-                <Text className="text-white font-black text-2xl">Configurações</Text>
-                <TouchableOpacity onPress={onClose} className="bg-zinc-900 p-2 rounded-full">
-                    <X size={20} color="white" />
-                </TouchableOpacity>
-            </View>
-
-            {/* Tabs */}
-            <View className="flex-row px-6 mt-4 mb-6">
-                {[
-                    { id: 'general', label: 'Geral', icon: Book },
-                    { id: 'index', label: 'Índice', icon: List },
-                    { id: 'references', label: 'Refs', icon: ToggleLeft },
-                ].map((tab) => (
-                    <TouchableOpacity 
-                        key={tab.id}
-                        onPress={() => setActiveTab(tab.id as any)}
-                        className={`mr-3 px-4 py-2.5 rounded-full flex-row items-center border ${activeTab === tab.id ? 'bg-indigo-600 border-indigo-500' : 'bg-zinc-900 border-zinc-800'}`}
-                    >
-                        <tab.icon size={14} color={activeTab === tab.id ? 'white' : '#71717a'} />
-                        <Text className={`ml-2 text-xs font-bold ${activeTab === tab.id ? 'text-white' : 'text-zinc-500'}`}>
-                            {tab.label}
-                        </Text>
+                {/* Header */}
+                <View className="px-6 pb-4 flex-row justify-between items-center border-b border-zinc-900">
+                    <Text className="text-white font-black text-2xl">Configurações</Text>
+                    <TouchableOpacity onPress={onClose} className="bg-zinc-900 p-2 rounded-full">
+                        <X size={20} color="white" />
                     </TouchableOpacity>
-                ))}
-            </View>
+                </View>
 
-            {/* Content */}
-            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}>
-                {renderTabContent()}
-            </ScrollView>
+                {/* Tabs */}
+                <View className="flex-row px-6 mt-4 mb-6">
+                    {[
+                        { id: 'general', label: 'Geral', icon: Book },
+                        { id: 'index', label: 'Índice', icon: List },
+                        { id: 'references', label: 'Refs', icon: ToggleLeft },
+                    ].map((tab) => (
+                        <TouchableOpacity 
+                            key={tab.id}
+                            onPress={() => setActiveTab(tab.id as any)}
+                            className={`mr-3 px-4 py-2.5 rounded-full flex-row items-center border ${activeTab === tab.id ? 'bg-indigo-600 border-indigo-500' : 'bg-zinc-900 border-zinc-800'}`}
+                        >
+                            <tab.icon size={14} color={activeTab === tab.id ? 'white' : '#71717a'} />
+                            <Text className={`ml-2 text-xs font-bold ${activeTab === tab.id ? 'text-white' : 'text-zinc-500'}`}>
+                                {tab.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
 
-            {/* Footer Action */}
-            <View className="p-6 border-t border-zinc-900 bg-zinc-950 pb-10">
-                <TouchableOpacity onPress={handleSave} disabled={isSaving}>
-                    <LinearGradient
-                        colors={['#4f46e5', '#3730a3']}
-                        className="p-4 rounded-2xl flex-row justify-center items-center"
-                    >
-                        {isSaving ? <ActivityIndicator color="white" /> : (
-                            <>
-                                <Save size={18} color="white" style={{ marginRight: 8 }} />
-                                <Text className="text-white font-bold uppercase tracking-widest">Salvar Alterações</Text>
-                            </>
-                        )}
-                    </LinearGradient>
-                </TouchableOpacity>
-            </View>
+                {/* Content */}
+                <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}>
+                    {renderTabContent()}
+                </ScrollView>
 
-        </Animated.View>
-      </View>
-    </Modal>
+                {/* Footer Action */}
+                <View className="p-6 border-t border-zinc-900 bg-zinc-950 pb-10">
+                    <TouchableOpacity onPress={handleSave} disabled={isSaving}>
+                        <LinearGradient
+                            colors={['#4f46e5', '#3730a3']}
+                            className="p-4 rounded-2xl flex-row justify-center items-center"
+                        >
+                            {isSaving ? <ActivityIndicator color="white" /> : (
+                                <>
+                                    <Save size={18} color="white" style={{ marginRight: 8 }} />
+                                    <Text className="text-white font-bold uppercase tracking-widest">Salvar Alterações</Text>
+                                </>
+                            )}
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
+
+            </Animated.View>
+        </View>
+        </Modal>
+
+        {/* Modal de IA Renderizado condicionalmente */}
+        {showAiGenerator && (
+            <CoverGeneratorModal 
+                visible={showAiGenerator}
+                onClose={() => setShowAiGenerator(false)}
+                draftId={draft?.id}
+                onCoverUpdated={handleAiCoverSelected}
+            />
+        )}
+    </>
   );
 };
