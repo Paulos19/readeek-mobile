@@ -19,8 +19,8 @@ export const THEMES = {
 const LOCATION_GENERATION_SCRIPT = `
     if (window.book) {
         window.book.ready.then(() => {
+            // Gera locais apenas se não existirem
             if (window.book.locations.length() === 0) {
-                console.log("Gerando localizações...");
                 return window.book.locations.generate(1000); 
             }
         }).then(() => {
@@ -100,12 +100,22 @@ export function useReader(rawBookId: string | string[]) {
     const router = useRouter();
     const navigation = useNavigation();
     
-    const { books, setBooks, setLastRead, updateProgress: updateGlobalProgress } = useReadingStore();
+    // Usamos o Store como Fonte da Verdade para o progresso local
+    const { 
+        books, 
+        setBooks, 
+        setLastRead, 
+        updateProgress: updateGlobalProgress,
+        getProgress: getStoreProgress
+    } = useReadingStore();
 
     const webviewRef = useRef<WebView>(null);
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const navigatingRef = useRef(false);
     const latestProgressRef = useRef<{ cfi: string, pct: number } | null>(null);
+    
+    // Trava para evitar que o WebView sobrescreva o progresso com "0" durante o boot
+    const isReadyRef = useRef(false);
 
     const bookId = Array.isArray(rawBookId) ? rawBookId[0] : rawBookId;
 
@@ -122,8 +132,6 @@ export function useReader(rawBookId: string | string[]) {
     const [menuVisible, setMenuVisible] = useState(false);
     const [menuExpanded, setMenuExpanded] = useState(false);
     const [activeTab, setActiveTab] = useState<'settings' | 'chapters' | 'highlights'>('settings');
-    
-    // ATUALIZADO: Agora armazenamos também 'y' para posicionar o menu
     const [selection, setSelection] = useState<{ cfiRange: string; text: string; y: number } | null>(null);
     
     // Configurações
@@ -156,21 +164,25 @@ export function useReader(rawBookId: string | string[]) {
         const load = async () => {
             try {
                 setIsLoading(true);
+                isReadyRef.current = false; // Bloqueia sync até terminar load
 
-                // 1. Metadados
-                const res = await api.get('/mobile/books');
+                // 1. Metadados (Sempre busca fresh do servidor para garantir atualizações)
                 let currentBook = null;
-                if (res.data) {
-                    setBooks(res.data);
-                    currentBook = res.data.find((b: any) => b.id === bookId);
-                } else {
+                try {
+                    const res = await api.get('/mobile/books');
+                    if (res.data) {
+                        setBooks(res.data);
+                        currentBook = res.data.find((b: any) => b.id === bookId);
+                    }
+                } catch (err) {
+                    console.log("Offline ou erro API, usando cache local");
                     currentBook = books.find((b) => b.id === bookId);
                 }
 
                 if (!currentBook) throw new Error("Livro não encontrado.");
                 setBookMeta(currentBook);
 
-                // 2. Arquivo Local e Cache
+                // 2. Arquivo Local e Cache (Lógica de Atualização Robusta)
                 const localUri = `${FileSystem.documentDirectory}${bookId}.epub`;
                 const fileInfo = await FileSystem.getInfoAsync(localUri);
                 
@@ -179,14 +191,26 @@ export function useReader(rawBookId: string | string[]) {
                 if (fileInfo.exists) {
                     const lastDownloadStr = await AsyncStorage.getItem(`@book_download_date:${bookId}`);
                     const lastDownloadTime = lastDownloadStr ? parseInt(lastDownloadStr) : 0;
+                    
+                    // Converte string ISO do servidor para timestamp
                     const serverUpdateTime = new Date(currentBook.updatedAt).getTime();
 
-                    if (serverUpdateTime > lastDownloadTime) shouldDownload = true;
+                    // Se o servidor tem uma versão mais nova (> 1min de diferença para evitar flutuação)
+                    if (serverUpdateTime > (lastDownloadTime + 60000)) {
+                        console.log(`[Reader] Atualização detectada. Local: ${lastDownloadTime}, Server: ${serverUpdateTime}`);
+                        shouldDownload = true;
+                    }
                 }
 
                 if (shouldDownload) {
                     if (!currentBook.filePath) throw new Error("URL inválida.");
-                    if (fileInfo.exists) await FileSystem.deleteAsync(localUri, { idempotent: true });
+                    
+                    // DELETA explícito para garantir que o SO não cacheie o arquivo antigo
+                    if (fileInfo.exists) {
+                        await FileSystem.deleteAsync(localUri, { idempotent: true });
+                    }
+
+                    console.log(`[Reader] Baixando: ${currentBook.filePath}`);
                     await FileSystem.downloadAsync(currentBook.filePath, localUri);
                     await AsyncStorage.setItem(`@book_download_date:${bookId}`, Date.now().toString());
                 }
@@ -195,11 +219,10 @@ export function useReader(rawBookId: string | string[]) {
                 const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
                 setBookBase64(base64);
 
-                // 4. Preferências e Progresso
-                const [savedSize, savedTheme, savedCfi, remoteHighlights] = await Promise.all([
+                // 4. Preferências e Progresso (Unificado)
+                const [savedSize, savedTheme, remoteHighlights] = await Promise.all([
                     AsyncStorage.getItem('@reader_fontsize'),
                     AsyncStorage.getItem('@reader_theme'),
-                    AsyncStorage.getItem(`@progress:${bookId}`),
                     highlightService.getByBook(bookId).catch(() => [] as Highlight[]),
                 ]);
 
@@ -209,8 +232,17 @@ export function useReader(rawBookId: string | string[]) {
                     fontSizeSv.value = size;
                 }
                 if (savedTheme) setCurrentTheme(savedTheme as any);
-                if (savedCfi) setInitialLocation(savedCfi);
-                else if (currentBook.currentLocation) setInitialLocation(currentBook.currentLocation);
+
+                // LÓGICA DE PROGRESSO CORRIGIDA:
+                // 1. Tenta pegar do Store Local (mais rápido e garantido após restart)
+                const localCfi = getStoreProgress(bookId);
+                
+                // 2. Se não tiver local, tenta pegar do Servidor (currentBook.currentLocation)
+                // 3. Se não tiver nada, começa do início (null)
+                const targetCfi = localCfi || currentBook.currentLocation || null;
+
+                console.log(`[Reader] Iniciando em: ${targetCfi ? 'Ponto Salvo' : 'Capa'}`);
+                setInitialLocation(targetCfi);
 
                 setHighlights(remoteHighlights);
 
@@ -219,10 +251,15 @@ export function useReader(rawBookId: string | string[]) {
                     title: currentBook.title,
                     author: currentBook.author || 'Autor Desconhecido',
                     progress: currentBook.progress || 0, 
-                    coverUrl: currentBook.coverUrl 
+                    coverUrl: currentBook.coverUrl,
+                    updatedAt: new Date(currentBook.updatedAt).getTime()
                 });
 
+                // Libera para receber eventos de progresso após 1.5 segundo de "render time"
+                setTimeout(() => { isReadyRef.current = true; }, 1500);
+
             } catch (error: any) {
+                console.error("Erro Load:", error);
                 Alert.alert("Erro", "Falha ao carregar livro.");
                 router.back();
             } finally { 
@@ -256,16 +293,19 @@ export function useReader(rawBookId: string | string[]) {
             const data = JSON.parse(event.nativeEvent.data);
             switch(data.type) {
                 case 'LOC':
+                    // Só aceita atualizações de progresso se o livro estiver totalmente carregado e a trava liberada
+                    if (!isReadyRef.current) return;
+
                     if (typeof data.percentage === 'number') { 
                         const pct = data.percentage;
                         setProgress(pct);
                         latestProgressRef.current = { cfi: data.cfi, pct };
+                        
+                        // Atualiza na Store Global (Persistida automaticamente)
                         updateGlobalProgress(bookId, data.cfi, pct * 100);
 
+                        // Debounce para API
                         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-                        AsyncStorage.setItem(`@progress:${bookId}`, data.cfi);
-                        AsyncStorage.setItem(`@percent:${bookId}`, pct.toString());
-
                         syncTimeoutRef.current = setTimeout(() => {
                             syncProgress(bookId, data.cfi, pct);
                         }, 2000);
@@ -278,11 +318,10 @@ export function useReader(rawBookId: string | string[]) {
                     setTocPreviews(prev => ({ ...prev, ...data.data }));
                     break;
                 case 'SELECTION': 
-                    // ATUALIZADO: Salva a posição 'y' junto com o texto
                     setSelection({ 
                         cfiRange: data.cfiRange, 
                         text: data.text,
-                        y: data.y || 0.5 // Default para meio se falhar
+                        y: data.y || 0.5 
                     }); 
                     setMenuVisible(false); 
                     break;
@@ -290,7 +329,6 @@ export function useReader(rawBookId: string | string[]) {
                     toggleMenu(); 
                     break;
                 case 'HIGHLIGHT_CLICKED': 
-                    // Clicou num destaque existente: Abre menu de notas
                     setMenuVisible(true); 
                     setMenuExpanded(true); 
                     setActiveTab('highlights'); 

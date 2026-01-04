@@ -1,47 +1,78 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text } from 'react-native';
-import { Feather } from 'lucide-react-native'; 
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withRepeat, 
+  withSequence, 
+  withTiming, 
+  FadeInDown,
+  Easing 
+} from 'react-native-reanimated';
+import { Feather } from 'lucide-react-native';
 
-export const Logo = () => {
+export function Logo() {
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    // Mantemos a pulsação sutil para dar vida
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.05, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const animatedIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
-    <View className="items-center justify-center mb-12">
-      <View className="relative items-center justify-center w-40 h-40">
-        
-        {/* Camada da Pena */}
-        <View 
-            className="absolute opacity-30 transform -rotate-[25deg] translate-x-2 translate-y-4"
-        >
-            <Feather 
-                size={150} 
-                color="#10b981" 
-                fill="rgba(16, 185, 129, 0.1)" 
-                strokeWidth={1.5}
-            />
+    <View className="items-center justify-center mb-10">
+      <Animated.View 
+        entering={FadeInDown.duration(800).springify()}
+        style={[animatedIconStyle]}
+        className="items-center justify-center mb-4 relative w-32 h-32"
+      >
+        {/* CAMADA 1: A Pena (Branca e Suave) */}
+        <View className="absolute rotate-[-12deg] top-0 -right-2 opacity-60 z-0">
+             <Feather size={85} color="#ffffff" strokeWidth={1.5} />
         </View>
-        
-        {/* Camada do R */}
-        <Text 
-            className="text-white font-black text-[110px] leading-none tracking-tighter z-10"
-            style={{ 
-                textShadowColor: 'rgba(0, 0, 0, 0.6)',
-                textShadowOffset: { width: 4, height: 4 },
-                textShadowRadius: 12,
-            }}
-        >
-            R
+
+        {/* CAMADA 2: O 'R' com efeito de Borda e Brilho */}
+        <View className="relative z-10">
+            {/* Simulação de Borda (Outline) Verde usando deslocamento */}
+            <Text className="absolute text-7xl font-black text-emerald-500 tracking-tighter" style={{ transform: [{translateX: -1}, {translateY: -1}] }}>R</Text>
+            <Text className="absolute text-7xl font-black text-emerald-500 tracking-tighter" style={{ transform: [{translateX: 1}, {translateY: -1}] }}>R</Text>
+            <Text className="absolute text-7xl font-black text-emerald-500 tracking-tighter" style={{ transform: [{translateX: -1}, {translateY: 1}] }}>R</Text>
+            <Text className="absolute text-7xl font-black text-emerald-500 tracking-tighter" style={{ transform: [{translateX: 1}, {translateY: 1}] }}>R</Text>
+
+            {/* R Principal: Branco Cintilante */}
+            <Text 
+              className="text-7xl font-black text-white tracking-tighter"
+              style={{ 
+                // Glow branco para o efeito "Cintilante"
+                textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                textShadowOffset: { width: 0, height: 0 },
+                textShadowRadius: 15
+              }}
+            >
+              R
+            </Text>
+        </View>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(200).duration(800)}>
+        <Text className="text-4xl font-bold text-white tracking-tighter text-center">
+          Readeek<Text className="text-emerald-500">.</Text>
         </Text>
-      </View>
-      
-      {/* Texto Inferior */}
-      <View className="items-center -mt-2">
-        <Text className="text-emerald-500 font-bold text-3xl tracking-[0.25em] uppercase drop-shadow-sm">
-            Readeek
+        <Text className="text-zinc-400 text-center mt-2 text-base font-medium">
+          Sua comunidade literária
         </Text>
-        <View className="h-[1px] w-12 bg-emerald-500/50 my-2" />
-        <Text className="text-zinc-400 text-xs font-medium tracking-[0.2em] uppercase">
-            Sua leitura, elevada.
-        </Text>
-      </View>
+      </Animated.View>
     </View>
   );
-};
+}

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StatusBar, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StatusBar } from 'react-native';
 import { useRouter, Link } from 'expo-router';
-import Animated from 'react-native-reanimated';
-import { Mail, Lock } from 'lucide-react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Mail, Lock, AlertCircle } from 'lucide-react-native';
 
-import { useAuthStore } from 'stores/useAuthStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import { AuthInput } from './_components/auth/AuthInput';
 import { AuthButton } from './_components/auth/AuthButton';
 import { Logo } from './_components/auth/Logo';
-import { useKeyboardShift } from '_hooks/useKeyboardShift';
+import { useKeyboardShift } from '../_hooks/useKeyboardShift'; // Ajuste o caminho conforme necessário
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -16,72 +16,124 @@ export default function LoginScreen() {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState({ email: '', password: '', general: '' });
 
   const keyboardStyle = useKeyboardShift();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-        Alert.alert("Campos vazios", "Por favor, preencha e-mail e senha.");
-        return;
+  const validate = () => {
+    let isValid = true;
+    let newErrors = { email: '', password: '', general: '' };
+
+    if (!email.trim()) {
+      newErrors.email = 'E-mail é obrigatório';
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      newErrors.email = 'E-mail inválido';
+      isValid = false;
     }
+
+    if (!password) {
+      newErrors.password = 'Senha é obrigatória';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
+  const handleLogin = async () => {
+    if (!validate()) return;
 
     try {
       await signIn(email, password);
-      router.replace('/(app)/dashboard');
+      // Redirecionamento já é tratado na Store, mas por segurança:
+      // router.replace('/(app)/dashboard'); 
     } catch (error: any) {
-      console.error("Login error:", error);
-      Alert.alert("Erro no Login", "Verifique suas credenciais e tente novamente.");
+      // Mantemos os inputs preenchidos e mostramos o erro geral
+      setErrors(prev => ({ 
+        ...prev, 
+        general: error.message || "Credenciais incorretas. Tente novamente." 
+      }));
     }
   };
 
   return (
     <View className="flex-1 bg-zinc-950">
-      <StatusBar barStyle="light-content" backgroundColor="#09090b" />
+      <StatusBar barStyle="light-content" backgroundColor="#09090b" translucent />
       
       <Animated.ScrollView 
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         style={[keyboardStyle]}
       >
         <Logo />
 
-        <View className="w-full">
+        <Animated.View entering={FadeInDown.delay(300).duration(800)} className="w-full space-y-4">
+          
+          {/* Input Email */}
+          <View>
             <AuthInput
                 icon={Mail}
                 placeholder="E-mail"
                 keyboardType="email-address"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  if(errors.email) setErrors(e => ({...e, email: ''}));
+                }}
+                autoCapitalize="none"
                 autoCorrect={false}
+                error={!!errors.email}
             />
-            
+            {errors.email ? <Text className="text-red-500 text-xs ml-1 mt-1 font-medium">{errors.email}</Text> : null}
+          </View>
+          
+          {/* Input Senha */}
+          <View>
             <AuthInput
                 icon={Lock}
                 placeholder="Senha"
                 isPassword
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(t) => {
+                  setPassword(t);
+                  if(errors.password) setErrors(e => ({...e, password: ''}));
+                }}
+                error={!!errors.password}
             />
+            {errors.password ? <Text className="text-red-500 text-xs ml-1 mt-1 font-medium">{errors.password}</Text> : null}
+          </View>
 
-            <TouchableOpacity className="self-end mb-8" activeOpacity={0.7}>
-                <Text className="text-zinc-500 text-sm">Esqueceu a senha?</Text>
-            </TouchableOpacity>
+          <TouchableOpacity className="self-end" activeOpacity={0.7}>
+              <Text className="text-zinc-500 text-sm font-medium">Esqueceu a senha?</Text>
+          </TouchableOpacity>
 
+          {/* Erro Geral da API */}
+          {errors.general ? (
+            <View className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg flex-row items-center gap-2">
+              <AlertCircle size={16} color="#ef4444" />
+              <Text className="text-red-500 text-xs flex-1 font-medium">{errors.general}</Text>
+            </View>
+          ) : null}
+
+          <View className="pt-4">
             <AuthButton 
                 title="ENTRAR"
                 onPress={handleLogin}
                 isLoading={isLoading}
             />
-        </View>
+          </View>
+        </Animated.View>
 
-        <View className="flex-row justify-center mt-12 items-center">
+        <Animated.View entering={FadeInDown.delay(400).duration(800)} className="flex-row justify-center mt-12 items-center">
             <Text className="text-zinc-500">Ainda não tem conta? </Text>
-            <Link href="/register" asChild>
+            <Link href="/sign-up" asChild>
                 <TouchableOpacity>
                     <Text className="text-emerald-500 font-bold p-2">Criar agora</Text>
                 </TouchableOpacity>
             </Link>
-        </View>
+        </Animated.View>
 
       </Animated.ScrollView>
     </View>
