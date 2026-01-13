@@ -8,71 +8,69 @@ import {
   Platform, 
   Dimensions, 
   ActivityIndicator,
-  KeyboardAvoidingView
+  Pressable
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
-  withSpring, 
   withTiming, 
   withRepeat,
-  withSequence,
+  useAnimatedKeyboard,
   Easing, 
   interpolate, 
   FadeIn, 
   FadeInDown, 
-  FadeOut,
-  interpolateColor
+  FadeOut
 } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 
-// API (Mockada ou Real)
+// API
 import { api } from '../lib/api'; 
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 // --- TIPOS ---
 type Step = 'NAME' | 'EMAIL' | 'PASSWORD' | 'SUCCESS';
 
-// --- CONFIGURAÇÃO VISUAL ---
+// --- CONFIGURAÇÃO ---
 const STEPS_CONFIG = {
   NAME: {
     title: 'Quem é você?',
-    subtitle: 'Seu nome será sua identidade na comunidade.',
-    lottie: require('../assets/lottie/user-identity.json'), // Coloque seu arquivo aqui
-    placeholder: 'Nome Completo'
+    subtitle: 'Como você quer ser chamado?',
+    lottie: require('../assets/lottie/user-identity.json'),
+    placeholder: 'Seu nome'
   },
   EMAIL: {
-    title: 'Seu melhor e-mail',
-    subtitle: 'Para onde devemos enviar atualizações e acessos?',
+    title: 'Seu e-mail',
+    subtitle: 'Para onde enviamos novidades?',
     lottie: require('../assets/lottie/email-open.json'),
-    placeholder: 'exemplo@readeek.com'
+    placeholder: 'exemplo@email.com'
   },
   PASSWORD: {
-    title: 'Crie uma senha',
-    subtitle: 'Use pelo menos 8 caracteres para sua segurança.',
+    title: 'Senha segura',
+    subtitle: 'Mínimo de 8 caracteres.',
     lottie: require('../assets/lottie/secure-lock.json'),
     placeholder: '••••••••'
   },
   SUCCESS: {
     title: 'Tudo pronto!',
-    subtitle: 'Sua jornada literária começa agora.',
+    subtitle: 'Sua jornada começa agora.',
     lottie: require('../assets/lottie/success-confetti.json'),
     placeholder: ''
   }
 };
 
-// --- COMPONENTE: LIVING BACKGROUND (Aurora Sutil) ---
+// --- BACKGROUND ---
 const LivingBackground = () => {
   const t = useSharedValue(0);
 
   useEffect(() => {
     t.value = withRepeat(
-      withTiming(1, { duration: 10000, easing: Easing.inOut(Easing.ease) }),
+      withTiming(1, { duration: 15000, easing: Easing.inOut(Easing.ease) }),
       -1,
       true
     );
@@ -80,41 +78,45 @@ const LivingBackground = () => {
 
   const styleBlob1 = useAnimatedStyle(() => ({
     transform: [
-      { translateX: interpolate(t.value, [0, 1], [-50, 50]) },
-      { translateY: interpolate(t.value, [0, 1], [-50, 20]) },
-      { scale: interpolate(t.value, [0, 1], [1, 1.2]) },
-    ],
-    opacity: 0.4
-  }));
-
-  const styleBlob2 = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: interpolate(t.value, [0, 1], [50, -50]) },
-      { translateY: interpolate(t.value, [0, 1], [100, 0]) },
-      { scale: interpolate(t.value, [0, 1], [1.2, 1]) },
+      { translateX: interpolate(t.value, [0, 1], [-20, 20]) },
+      { scale: interpolate(t.value, [0, 1], [1, 1.1]) },
     ],
     opacity: 0.3
   }));
 
+  const styleBlob2 = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: interpolate(t.value, [0, 1], [20, -20]) },
+      { scale: interpolate(t.value, [0, 1], [1.1, 1]) },
+    ],
+    opacity: 0.2
+  }));
+
   return (
-    <View className="absolute inset-0 bg-zinc-950 overflow-hidden">
-      {/* Blob Superior Esquerdo (Emerald) */}
-      <Animated.View 
-        style={[styleBlob1]}
-        className="absolute -top-20 -left-20 w-[400px] h-[400px] rounded-full bg-emerald-900/40 blur-[90px]" 
-      />
-      {/* Blob Inferior Direito (Indigo/Purple) */}
-      <Animated.View 
-        style={[styleBlob2]}
-        className="absolute top-1/3 -right-32 w-[500px] h-[500px] rounded-full bg-indigo-900/40 blur-[100px]" 
-      />
+    <View className="absolute inset-0 bg-zinc-950 overflow-hidden pointer-events-none">
+      <Animated.View style={[styleBlob1]} className="absolute -top-40 -left-20 w-[500px] h-[500px] rounded-full bg-emerald-900/30 blur-[120px]" />
+      <Animated.View style={[styleBlob2]} className="absolute top-1/3 -right-40 w-[600px] h-[600px] rounded-full bg-indigo-900/30 blur-[120px]" />
     </View>
   );
 };
 
-export default function SignUpModern() {
+export default function SignUpFinal() {
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
+  
+  // --- SOLUÇÃO DE TECLADO (ANDROID & iOS) ---
+  // Acessa a altura do teclado diretamente da thread de UI
+  const keyboard = useAnimatedKeyboard();
+
+  // Move a tela inteira para cima baseado na altura do teclado
+  const animatedContainerStyle = useAnimatedStyle(() => {
+    return {
+      // translateY negativo move para cima
+      transform: [{ translateY: -keyboard.height.value }],
+      // Opcional: Adiciona um padding extra no bottom quando teclado abre para não colar demais
+      paddingBottom: keyboard.height.value > 0 ? 0 : 20 
+    };
+  });
 
   // Estados
   const [stepIndex, setStepIndex] = useState(0);
@@ -122,80 +124,66 @@ export default function SignUpModern() {
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   
-  // Estado do Teclado
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-
   const stepsKeys: Step[] = ['NAME', 'EMAIL', 'PASSWORD', 'SUCCESS'];
   const currentStepKey = stepsKeys[stepIndex];
   const config = STEPS_CONFIG[currentStepKey];
 
-  // --- ANIMAÇÕES ---
-  const buttonWidth = useSharedValue(width - 48); // Largura inicial (padding 24px * 2)
-  const buttonRadius = useSharedValue(16);
-  const contentOpacity = useSharedValue(1); // Opacidade do texto do botão
+  // --- ANIMAÇÕES DO BOTÃO (SUAVES / TIMING) ---
+  const buttonWidth = useSharedValue(140); 
+  const buttonRadius = useSharedValue(12);
+  const textOpacity = useSharedValue(1);
 
-  // --- CONTROLE DE TECLADO & BOTÃO MORPHING ---
   useEffect(() => {
-    const showSubscription = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', 
-      () => {
-        setKeyboardVisible(true);
-        // Transforma em bola
-        buttonWidth.value = withSpring(64, { damping: 15 }); // Tamanho da bola
-        buttonRadius.value = withSpring(32); // Totalmente redondo
-        contentOpacity.value = withTiming(0, { duration: 100 }); // Esconde texto "Continuar"
-      }
-    );
-    const hideSubscription = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', 
-      () => {
-        setKeyboardVisible(false);
-        // Volta ao normal
-        buttonWidth.value = withSpring(width - 48, { damping: 15 });
-        buttonRadius.value = withSpring(16);
-        contentOpacity.value = withTiming(1, { duration: 200 }); // Mostra texto
-      }
-    );
+    const smoothConfig = { duration: 300, easing: Easing.out(Easing.quad) };
+
+    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => {
+      // Vira bolinha
+      buttonWidth.value = withTiming(56, smoothConfig); 
+      buttonRadius.value = withTiming(28, smoothConfig); 
+      textOpacity.value = withTiming(0, { duration: 150 });
+    });
+    
+    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+      // Volta ao normal
+      buttonWidth.value = withTiming(140, smoothConfig);
+      buttonRadius.value = withTiming(12, smoothConfig);
+      textOpacity.value = withTiming(1, { duration: 300 });
+    });
 
     return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
+      showSub.remove();
+      hideSub.remove();
     };
   }, []);
 
-  // Foca o input ao trocar de passo
   useEffect(() => {
     if (stepIndex < 3) {
-      // Pequeno delay para a animação de transição acontecer primeiro
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 400);
+      setTimeout(() => inputRef.current?.focus(), 400);
     } else {
         Keyboard.dismiss();
     }
   }, [stepIndex]);
 
-  // --- LÓGICA DE NEGÓCIO ---
+  // --- LÓGICA ---
   const validateAndNext = async () => {
     setError('');
     let isValid = false;
 
-    // Validações Simples
     if (currentStepKey === 'NAME') {
       if (formData.name.trim().length < 3) {
-        setError('Nome muito curto.');
+        setError('Nome muito curto');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } else isValid = true;
     } 
     else if (currentStepKey === 'EMAIL') {
       if (!/\S+@\S+\.\S+/.test(formData.email)) {
-        setError('E-mail inválido.');
+        setError('E-mail inválido');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } else isValid = true;
     }
     else if (currentStepKey === 'PASSWORD') {
       if (formData.password.length < 6) {
-        setError('Mínimo 6 caracteres.');
+        setError('Mínimo 6 caracteres');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } else isValid = true;
     }
@@ -213,7 +201,6 @@ export default function SignUpModern() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // Simulação ou Chamada Real
       await api.post('/mobile/auth/register', {
         name: formData.name,
         email: formData.email.toLowerCase().trim(),
@@ -221,16 +208,15 @@ export default function SignUpModern() {
       });
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setStepIndex(3); // Vai para SUCCESS
+      setStepIndex(3);
       
-      // Espera a animação de confetti antes de sair
       setTimeout(() => {
         router.replace({ pathname: '/login', params: { registeredEmail: formData.email } });
       }, 3000);
 
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setError(err.response?.data?.error || "Erro ao criar conta. Tente novamente.");
+      setError(err.response?.data?.error || "Erro ao criar conta");
     } finally {
       setLoading(false);
     }
@@ -242,97 +228,109 @@ export default function SignUpModern() {
   };
 
   // --- ESTILOS ANIMADOS ---
-  const buttonStyle = useAnimatedStyle(() => ({
+  const rButtonStyle = useAnimatedStyle(() => ({
     width: buttonWidth.value,
     borderRadius: buttonRadius.value,
   }));
 
-  const textButtonStyle = useAnimatedStyle(() => ({
-    opacity: contentOpacity.value,
-    position: 'absolute', // Para não ocupar espaço quando invisível e permitir centralização do ícone
+  const rTextStyle = useAnimatedStyle(() => ({
+    opacity: textOpacity.value,
+    display: textOpacity.value === 0 ? 'none' : 'flex'
   }));
 
-  const arrowButtonStyle = useAnimatedStyle(() => ({
-    // O ícone aparece quando o texto desaparece (inverso)
-    opacity: interpolate(contentOpacity.value, [0, 1], [1, 0]),
-    transform: [{ scale: interpolate(contentOpacity.value, [0, 1], [1, 0.5]) }]
-  }));
-
-  // Renderização da Tela de Sucesso
   if (currentStepKey === 'SUCCESS') {
     return (
       <View className="flex-1 bg-zinc-950 items-center justify-center">
         <LivingBackground />
-        <LottieView
-          source={config.lottie}
-          autoPlay
-          loop={false}
-          style={{ width: 300, height: 300 }}
-        />
-        <Animated.View entering={FadeInDown.delay(500)}>
-            <Text className="text-white text-3xl font-black text-center mt-4">Conta Criada!</Text>
-            <Text className="text-zinc-400 text-center mt-2">Preparando seu ambiente...</Text>
+        <LottieView source={config.lottie} autoPlay loop={false} style={{ width: 300, height: 300 }} />
+        <Animated.View entering={FadeInDown.delay(300)}>
+            <Text className="text-white text-3xl font-bold text-center mt-4">Conta Criada!</Text>
         </Animated.View>
       </View>
     );
   }
 
   return (
-    <View className="flex-1">
+    <View className="flex-1 bg-zinc-950">
       <StatusBar style="light" />
       <LivingBackground />
 
-      {/* Header Fixo */}
-      <View className="pt-14 px-6 flex-row items-center">
+      {/* Header Fixo no topo (z-index alto para não ser coberto) */}
+      <View className="absolute top-0 left-0 right-0 pt-14 px-6 flex-row items-center z-50">
         <TouchableOpacity onPress={goBack} className="p-2 -ml-2 rounded-full active:bg-white/10">
           <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
         
-        {/* Barra de Progresso Minimalista */}
-        <View className="flex-1 flex-row h-1 bg-zinc-800 ml-4 rounded-full overflow-hidden gap-1">
+        <View className="flex-1 flex-row h-1 bg-zinc-800/50 ml-4 rounded-full overflow-hidden gap-1">
             {[0, 1, 2].map(i => (
-                <View 
-                    key={i} 
-                    className={`flex-1 rounded-full transition-all duration-500 ${i <= stepIndex ? 'bg-emerald-500' : 'bg-transparent'}`} 
-                />
+                <View key={i} className={`flex-1 rounded-full transition-all duration-500 ${i <= stepIndex ? 'bg-emerald-500' : 'bg-transparent'}`} />
             ))}
         </View>
       </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
+      {/* CONTAINER PRINCIPAL ANIMADO:
+         - Usa justify-between para separar (Topo) e (Base).
+         - O estilo 'animatedContainerStyle' aplica a translação nativa do teclado.
+         - Flex-1 garante que ocupe a tela toda.
+      */}
+      <Animated.View 
+        style={[animatedContainerStyle]} 
+        className="flex-1 flex-col justify-between pt-32" 
       >
-        <View className="flex-1 justify-center px-8">
             
-            {/* Animação do Mascote (Lottie) */}
+        {/* ÁREA SUPERIOR: Título e Lottie */}
+        <View className="flex-1 px-8 justify-center items-start">
             <Animated.View 
-                key={`lottie-${stepIndex}`} // Força re-render para reiniciar animação
-                entering={FadeIn.duration(600)} 
+                key={`lottie-${stepIndex}`}
+                entering={FadeIn.duration(400)} 
                 exiting={FadeOut.duration(200)}
-                className="items-center mb-8 h-40 justify-center"
+                className="mb-8 self-center"
             >
                 <LottieView
                     source={config.lottie}
                     autoPlay
                     loop
-                    style={{ width: 180, height: 180 }}
+                    style={{ width: 140, height: 140 }}
                 />
             </Animated.View>
 
-            {/* Textos e Inputs */}
             <Animated.View 
                 key={`text-${stepIndex}`}
-                entering={FadeInDown.springify()}
+                entering={FadeInDown.duration(400)}
                 className="w-full"
             >
-                <Text className="text-white text-3xl font-black mb-2">{config.title}</Text>
-                <Text className="text-zinc-400 text-base mb-8">{config.subtitle}</Text>
+                <Text className="text-white text-3xl font-bold mb-2 tracking-tight">
+                    {config.title}
+                </Text>
+                <Text className="text-zinc-400 text-lg">
+                    {config.subtitle}
+                </Text>
+            </Animated.View>
+        </View>
 
-                <View className={`border-b-2 py-2 flex-row items-center ${error ? 'border-red-500' : 'border-zinc-700 focus:border-emerald-500'}`}>
+        {/* ÁREA INFERIOR: Input Inline + Botão Bolinha */}
+        <View className="px-6 pb-8 pt-2 w-full bg-transparent">
+            
+            {/* Error Banner Flutuante */}
+            {error ? (
+                <Animated.View entering={FadeInDown} className="absolute -top-10 left-6 right-6">
+                    <Text className="text-red-400 font-medium text-sm text-center">{error}</Text>
+                </Animated.View>
+            ) : null}
+
+            <View className="flex-row items-end gap-4">
+                
+                {/* INPUT CLEAN / INLINE */}
+                <View className="flex-1 border-b border-zinc-700 pb-2 mb-1">
+                    {(currentStepKey === 'NAME' ? formData.name : currentStepKey === 'EMAIL' ? formData.email : formData.password).length > 0 && (
+                        <Animated.Text entering={FadeIn} className="text-[10px] text-emerald-500 uppercase font-bold mb-1">
+                            {currentStepKey === 'PASSWORD' ? 'Senha' : currentStepKey === 'EMAIL' ? 'E-mail' : 'Nome'}
+                        </Animated.Text>
+                    )}
+
                     <TextInput
                         ref={inputRef}
-                        className="flex-1 text-white text-2xl font-medium"
+                        className="text-white text-2xl font-medium p-0 leading-tight"
                         placeholder={config.placeholder}
                         placeholderTextColor="#52525b"
                         value={currentStepKey === 'NAME' ? formData.name : currentStepKey === 'EMAIL' ? formData.email : formData.password}
@@ -347,56 +345,47 @@ export default function SignUpModern() {
                         secureTextEntry={currentStepKey === 'PASSWORD'}
                         onSubmitEditing={validateAndNext}
                         returnKeyType="next"
+                        autoCorrect={false}
+                        selectionColor="#10b981"
                     />
                 </View>
-                
-                {/* Mensagem de Erro Inline */}
-                {error ? (
-                    <Animated.Text entering={FadeIn} className="text-red-500 mt-2 font-bold">{error}</Animated.Text>
-                ) : null}
 
-            </Animated.View>
-        </View>
-
-        {/* --- MORPHING BUTTON --- */}
-        <View className="items-center pb-8 pt-4">
-            <TouchableOpacity 
-                activeOpacity={0.8} 
-                onPress={validateAndNext}
-                disabled={loading}
-            >
-                <Animated.View 
-                    style={[buttonStyle]}
-                    className={`h-16 bg-emerald-500 items-center justify-center shadow-lg shadow-emerald-500/20 overflow-hidden relative`}
+                {/* BOTÃO BOLINHA/PÍLULA SUAVE */}
+                <TouchableOpacity 
+                    activeOpacity={0.8} 
+                    onPress={validateAndNext}
+                    disabled={loading}
                 >
-                    {loading ? (
-                        <ActivityIndicator color="black" />
-                    ) : (
-                        <>
-                            {/* Texto (Visível quando teclado fechado) */}
-                            <Animated.Text 
-                                style={[textButtonStyle]} 
-                                className="text-zinc-950 font-black text-lg tracking-wide uppercase"
-                            >
-                                {stepIndex === 2 ? 'Finalizar' : 'Continuar'}
-                            </Animated.Text>
-
-                            {/* Ícone (Visível quando teclado aberto ou transição) */}
-                            {/* Usamos absolute para garantir que ele esteja centralizado no círculo */}
-                            <Animated.View style={[arrowButtonStyle, { position: 'absolute' }]}>
+                    <Animated.View 
+                        style={[rButtonStyle]}
+                        className="h-[56px] bg-emerald-500 items-center justify-center shadow-lg shadow-emerald-900/40 flex-row"
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#09090b" />
+                        ) : (
+                            <>
+                                <Animated.Text 
+                                    style={[rTextStyle]} 
+                                    className="text-zinc-950 font-bold text-base uppercase mr-2"
+                                    numberOfLines={1}
+                                >
+                                    {stepIndex === 2 ? 'Fim' : 'Próximo'}
+                                </Animated.Text>
+                                
                                 {stepIndex === 2 ? (
-                                    <Check size={28} color="#09090b" strokeWidth={3} />
+                                    <Check size={24} color="#09090b" strokeWidth={2.5} />
                                 ) : (
-                                    <ArrowRight size={28} color="#09090b" strokeWidth={3} />
+                                    <ArrowRight size={24} color="#09090b" strokeWidth={2.5} />
                                 )}
-                            </Animated.View>
-                        </>
-                    )}
-                </Animated.View>
-            </TouchableOpacity>
+                            </>
+                        )}
+                    </Animated.View>
+                </TouchableOpacity>
+
+            </View>
         </View>
 
-      </KeyboardAvoidingView>
+      </Animated.View>
     </View>
   );
 }
