@@ -17,14 +17,14 @@ import { Book, UserRole } from './_types/book';
 
 // Componentes UI
 import { HeroBanner } from './_components/HeroBanner';
-import { GreetingHeader } from './_components/GreetingHeader'; // Agora usa o componente completo
+import { GreetingHeader } from './_components/GreetingHeader'; 
 import { BookDetailsModal } from './_components/BookDetailsModal';
 import { RankingCard } from './_components/RankingCard';
 import { WriterCallCard } from './_components/WriterCallCard';
 
 const { width } = Dimensions.get('window');
 
-// --- COMPONENTES VISUAIS ---
+// --- COMPONENTES VISUAIS AUXILIARES ---
 
 const SectionHeader = React.memo(({ title, subtitle, icon: Icon, color = "#10b981", onPress }: { title: string, subtitle?: string, icon?: any, color?: string, onPress?: () => void }) => (
     <View className="px-6 flex-row items-end justify-between mb-5 mt-8">
@@ -179,7 +179,6 @@ export default function Dashboard() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        // Não precisamos recarregar notificações aqui, o GreetingHeader faz isso sozinho
         await Promise.all([fetchBooks(), loadTopRanking()]);
         setRefreshing(false);
     };
@@ -279,7 +278,6 @@ export default function Dashboard() {
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
                 >
-                    {/* O GreetingHeader agora contém o Header + Continue Reading */}
                     <GreetingHeader
                         user={user}
                         lastReadBook={lastReadBook}
@@ -292,6 +290,11 @@ export default function Dashboard() {
                             books={featuredBooks.length > 0 ? featuredBooks.slice(0, 5) : allBooks.slice(0, 3)}
                             onPress={handleBookPress}
                         />
+                    </View>
+
+                    {/* Seção Writer Studio - Destaque Principal */}
+                    <View className="mb-2">
+                        <WriterCallCard />
                     </View>
 
                     {/* Minha Estante */}
@@ -311,11 +314,6 @@ export default function Dashboard() {
                             </ScrollView>
                         </View>
                     )}
-
-                    {/* CTA para Escritores */}
-                    <View className="mt-8 mb-4">
-                        <WriterCallCard />
-                    </View>
 
                     {/* Ranking */}
                     {topUsers.length > 0 && (

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { 
@@ -39,8 +39,10 @@ export const WriterCallCard = () => {
 
   const fetchLatestDraft = async () => {
     try {
+      // Busca os rascunhos do usuário
       const res = await api.get('/mobile/writer/drafts');
       if (Array.isArray(res.data) && res.data.length > 0) {
+        // Ordena pelo mais recente
         const sorted = res.data.sort((a: Draft, b: Draft) => 
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
@@ -51,8 +53,6 @@ export const WriterCallCard = () => {
     } catch (error) {
       console.log('Erro ao buscar drafts:', error);
     } finally {
-      // Pequeno delay artificial se for muito rápido, para evitar "flicker", 
-      // ou remova se preferir instantâneo.
       setLoading(false);
     }
   };
@@ -71,14 +71,8 @@ export const WriterCallCard = () => {
   // --- SKELETON LOADING (UX Melhorada) ---
   if (loading) {
     return (
-      <View className="mx-6 mt-6 mb-2 h-[140px] bg-zinc-900/50 rounded-[24px] border border-zinc-800 overflow-hidden">
-        <View className="flex-1 p-4 flex-row gap-4 items-center opacity-50">
-           <View className="h-24 w-16 bg-zinc-700 rounded-lg animate-pulse" />
-           <View className="flex-1 gap-3">
-              <View className="h-4 w-3/4 bg-zinc-700 rounded animate-pulse" />
-              <View className="h-3 w-1/2 bg-zinc-800 rounded animate-pulse" />
-           </View>
-        </View>
+      <View className="mx-6 mt-6 mb-2 h-[140px] bg-zinc-900/50 rounded-[24px] border border-zinc-800 overflow-hidden justify-center">
+         <ActivityIndicator color="#6366f1" />
       </View>
     );
   }
@@ -100,9 +94,9 @@ export const WriterCallCard = () => {
             
             <TouchableOpacity 
               onPress={() => router.push('/writer' as any)}
-              className="flex-row items-center gap-1 active:opacity-70"
+              className="flex-row items-center gap-1 active:opacity-70 bg-zinc-800/50 px-2 py-1 rounded-full border border-zinc-700/50"
             >
-              <Text className="text-zinc-400 text-xs font-medium">Ver todos</Text>
+              <Text className="text-zinc-400 text-xs font-medium">Meus livros</Text>
               <LayoutGrid size={12} color="#a1a1aa" />
             </TouchableOpacity>
           </View>
@@ -132,9 +126,9 @@ export const WriterCallCard = () => {
                   </View>
                   {/* Badge Caps */}
                   <View className="absolute -bottom-2 -right-2 bg-zinc-950 border border-zinc-800 px-2 py-0.5 rounded-full shadow-sm">
-                     <Text className="text-[9px] text-zinc-300 font-bold">
+                      <Text className="text-[9px] text-zinc-300 font-bold">
                         {latestDraft._count?.chapters || 0} caps
-                     </Text>
+                      </Text>
                   </View>
                 </View>
 
@@ -174,7 +168,7 @@ export const WriterCallCard = () => {
                    Quer começar algo novo?
                  </Text>
                  <TouchableOpacity 
-                   onPress={() => router.push('/writer/create' as any)} // Assumindo rota de criação direta ou vai para index
+                   onPress={() => router.push('/writer/create' as any)}
                    className="flex-row items-center gap-1.5 active:opacity-60"
                  >
                     <Plus size={12} color="#e4e4e7" />
