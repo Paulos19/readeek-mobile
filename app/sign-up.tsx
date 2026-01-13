@@ -1,361 +1,402 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  Keyboard, 
+  Platform, 
+  Dimensions, 
+  ActivityIndicator,
+  KeyboardAvoidingView
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown, FadeInRight, FadeOutLeft, useAnimatedStyle, withSpring, withTiming, interpolateColor, useSharedValue } from 'react-native-reanimated';
-import { ArrowLeft, ArrowRight, Check, X, Eye, EyeOff, Mail, User, Lock, ShieldCheck } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withSpring, 
+  withTiming, 
+  withRepeat,
+  withSequence,
+  Easing, 
+  interpolate, 
+  FadeIn, 
+  FadeInDown, 
+  FadeOut,
+  interpolateColor
+} from 'react-native-reanimated';
+import LottieView from 'lottie-react-native';
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Haptics from 'expo-haptics';
 
-import { useAuthStore } from '../stores/useAuthStore'; // Vamos precisar expandir o store depois
-import { api } from '../lib/api'; // Acesso direto para o registro se não estiver no store ainda
+// API (Mockada ou Real)
+import { api } from '../lib/api'; 
 
-// --- Tipos & Interfaces ---
-type Step = 'NAME' | 'EMAIL' | 'PASSWORD';
+const { width, height } = Dimensions.get('window');
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
+// --- TIPOS ---
+type Step = 'NAME' | 'EMAIL' | 'PASSWORD' | 'SUCCESS';
 
-// --- Componente: Barra de Progresso ---
-const ProgressBar = ({ step, total }: { step: number; total: number }) => {
-  const progress = useSharedValue(0);
+// --- CONFIGURAÇÃO VISUAL ---
+const STEPS_CONFIG = {
+  NAME: {
+    title: 'Quem é você?',
+    subtitle: 'Seu nome será sua identidade na comunidade.',
+    lottie: require('../assets/lottie/user-identity.json'), // Coloque seu arquivo aqui
+    placeholder: 'Nome Completo'
+  },
+  EMAIL: {
+    title: 'Seu melhor e-mail',
+    subtitle: 'Para onde devemos enviar atualizações e acessos?',
+    lottie: require('../assets/lottie/email-open.json'),
+    placeholder: 'exemplo@readeek.com'
+  },
+  PASSWORD: {
+    title: 'Crie uma senha',
+    subtitle: 'Use pelo menos 8 caracteres para sua segurança.',
+    lottie: require('../assets/lottie/secure-lock.json'),
+    placeholder: '••••••••'
+  },
+  SUCCESS: {
+    title: 'Tudo pronto!',
+    subtitle: 'Sua jornada literária começa agora.',
+    lottie: require('../assets/lottie/success-confetti.json'),
+    placeholder: ''
+  }
+};
+
+// --- COMPONENTE: LIVING BACKGROUND (Aurora Sutil) ---
+const LivingBackground = () => {
+  const t = useSharedValue(0);
 
   useEffect(() => {
-    progress.value = withTiming((step + 1) / total, { duration: 500 });
-  }, [step]);
+    t.value = withRepeat(
+      withTiming(1, { duration: 10000, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, []);
 
-  const style = useAnimatedStyle(() => ({
-    width: `${progress.value * 100}%`,
+  const styleBlob1 = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: interpolate(t.value, [0, 1], [-50, 50]) },
+      { translateY: interpolate(t.value, [0, 1], [-50, 20]) },
+      { scale: interpolate(t.value, [0, 1], [1, 1.2]) },
+    ],
+    opacity: 0.4
+  }));
+
+  const styleBlob2 = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: interpolate(t.value, [0, 1], [50, -50]) },
+      { translateY: interpolate(t.value, [0, 1], [100, 0]) },
+      { scale: interpolate(t.value, [0, 1], [1.2, 1]) },
+    ],
+    opacity: 0.3
   }));
 
   return (
-    <View className="h-1 bg-zinc-900 w-full rounded-full overflow-hidden mt-4">
-      <Animated.View style={style} className="h-full bg-emerald-500 rounded-full" />
+    <View className="absolute inset-0 bg-zinc-950 overflow-hidden">
+      {/* Blob Superior Esquerdo (Emerald) */}
+      <Animated.View 
+        style={[styleBlob1]}
+        className="absolute -top-20 -left-20 w-[400px] h-[400px] rounded-full bg-emerald-900/40 blur-[90px]" 
+      />
+      {/* Blob Inferior Direito (Indigo/Purple) */}
+      <Animated.View 
+        style={[styleBlob2]}
+        className="absolute top-1/3 -right-32 w-[500px] h-[500px] rounded-full bg-indigo-900/40 blur-[100px]" 
+      />
     </View>
   );
 };
 
-// --- Componente: Medidor de Força de Senha ---
-const PasswordStrengthMeter = ({ password }: { password: string }) => {
-  if (!password) return null;
-
-  const hasLength = password.length >= 8;
-  const hasUpper = /[A-Z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-
-  const score = [hasLength, hasUpper, hasNumber, hasSpecial].filter(Boolean).length;
-  
-  // Cores baseadas no score (0-4)
-  const getStrengthColor = () => {
-    switch(score) {
-      case 0: return 'bg-red-500';
-      case 1: return 'bg-red-400';
-      case 2: return 'bg-orange-400';
-      case 3: return 'bg-yellow-400';
-      case 4: return 'bg-emerald-500';
-      default: return 'bg-zinc-800';
-    }
-  };
-
-  const getLabel = () => {
-    switch(score) {
-      case 1: return 'Muito fraca';
-      case 2: return 'Fraca';
-      case 3: return 'Média';
-      case 4: return 'Forte e segura';
-      default: return 'Muito curta';
-    }
-  };
-
-  return (
-    <Animated.View entering={FadeInDown} className="mt-3">
-      <View className="flex-row gap-1 h-1 mb-2">
-        {[1, 2, 3, 4].map((index) => (
-          <View 
-            key={index} 
-            className={`flex-1 rounded-full transition-all duration-300 ${index <= score ? getStrengthColor() : 'bg-zinc-800'}`} 
-          />
-        ))}
-      </View>
-      <Text className="text-zinc-500 text-xs text-right font-medium">
-        {getLabel()}
-      </Text>
-    </Animated.View>
-  );
-};
-
-export default function SignUpWizard() {
+export default function SignUpModern() {
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
 
   // Estados
   const [stepIndex, setStepIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [error, setError] = useState('');
   
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
-  });
+  // Estado do Teclado
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
-  const [error, setError] = useState<string | null>(null);
+  const stepsKeys: Step[] = ['NAME', 'EMAIL', 'PASSWORD', 'SUCCESS'];
+  const currentStepKey = stepsKeys[stepIndex];
+  const config = STEPS_CONFIG[currentStepKey];
 
-  // Passos definidos
-  const steps: Step[] = ['NAME', 'EMAIL', 'PASSWORD'];
-  const currentStep = steps[stepIndex];
+  // --- ANIMAÇÕES ---
+  const buttonWidth = useSharedValue(width - 48); // Largura inicial (padding 24px * 2)
+  const buttonRadius = useSharedValue(16);
+  const contentOpacity = useSharedValue(1); // Opacidade do texto do botão
 
-  // Focar no input ao mudar de passo
+  // --- CONTROLE DE TECLADO & BOTÃO MORPHING ---
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 400); // Pequeno delay para a animação
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', 
+      () => {
+        setKeyboardVisible(true);
+        // Transforma em bola
+        buttonWidth.value = withSpring(64, { damping: 15 }); // Tamanho da bola
+        buttonRadius.value = withSpring(32); // Totalmente redondo
+        contentOpacity.value = withTiming(0, { duration: 100 }); // Esconde texto "Continuar"
+      }
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', 
+      () => {
+        setKeyboardVisible(false);
+        // Volta ao normal
+        buttonWidth.value = withSpring(width - 48, { damping: 15 });
+        buttonRadius.value = withSpring(16);
+        contentOpacity.value = withTiming(1, { duration: 200 }); // Mostra texto
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  // Foca o input ao trocar de passo
+  useEffect(() => {
+    if (stepIndex < 3) {
+      // Pequeno delay para a animação de transição acontecer primeiro
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 400);
+    } else {
+        Keyboard.dismiss();
+    }
   }, [stepIndex]);
 
-  // --- Lógica de Validação ---
-  const validateStep = () => {
-    setError(null);
+  // --- LÓGICA DE NEGÓCIO ---
+  const validateAndNext = async () => {
+    setError('');
     let isValid = false;
 
-    switch (currentStep) {
-      case 'NAME':
-        if (formData.name.trim().split(' ').length < 2) {
-          setError('Por favor, digite seu nome e sobrenome.');
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        } else {
-          isValid = true;
-        }
-        break;
-      
-      case 'EMAIL':
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(formData.email)) {
-          setError('Este e-mail parece inválido.');
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        } else {
-          isValid = true;
-        }
-        break;
-
-      case 'PASSWORD':
-        if (formData.password.length < 8) {
-          setError('A senha deve ter pelo menos 8 caracteres.');
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        } else if (formData.password !== formData.confirmPassword) {
-          setError('As senhas não coincidem.');
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        } else {
-          isValid = true;
-        }
-        break;
+    // Validações Simples
+    if (currentStepKey === 'NAME') {
+      if (formData.name.trim().length < 3) {
+        setError('Nome muito curto.');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else isValid = true;
+    } 
+    else if (currentStepKey === 'EMAIL') {
+      if (!/\S+@\S+\.\S+/.test(formData.email)) {
+        setError('E-mail inválido.');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else isValid = true;
+    }
+    else if (currentStepKey === 'PASSWORD') {
+      if (formData.password.length < 6) {
+        setError('Mínimo 6 caracteres.');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else isValid = true;
     }
 
     if (isValid) {
-      if (stepIndex < steps.length - 1) {
-        setStepIndex(prev => prev + 1);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (currentStepKey === 'PASSWORD') {
+        await handleSubmit();
       } else {
-        handleRegister();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setStepIndex(p => p + 1);
       }
     }
   };
 
-  // --- API Integration ---
-  const handleRegister = async () => {
-    setIsLoading(true);
-    setError(null);
-
+  const handleSubmit = async () => {
+    setLoading(true);
     try {
-      // Ajustando a chamada para o padrão da sua API (verificado no context)
-      // Endpoint esperado: POST /mobile/auth/register (ou similar, baseado no login)
-      // Como não tenho o endpoint exato de register no context, vou simular a estrutura correta:
-      
-      const response = await api.post('/mobile/auth/register', {
-        name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
+      // Simulação ou Chamada Real
+      await api.post('/mobile/auth/register', {
+        name: formData.name,
+        email: formData.email.toLowerCase().trim(),
         password: formData.password
       });
-
-      // Sucesso
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      // Auto-login ou redirecionar
-      // router.replace('/(app)/dashboard'); 
-      // Por boa prática de UX, mandamos para o login para confirmar que ele sabe a senha
-      router.replace({ pathname: '/login', params: { registeredEmail: formData.email } });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStepIndex(3); // Vai para SUCCESS
+      
+      // Espera a animação de confetti antes de sair
+      setTimeout(() => {
+        router.replace({ pathname: '/login', params: { registeredEmail: formData.email } });
+      }, 3000);
 
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err.response?.data?.error || "Não foi possível criar a conta. Tente novamente.";
-      setError(msg);
+      setError(err.response?.data?.error || "Erro ao criar conta. Tente novamente.");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  // --- Renderização Dinâmica dos Inputs ---
-  const renderStepContent = () => {
-    switch (currentStep) {
-      case 'NAME':
-        return (
-          <Animated.View key="step1" entering={FadeInRight} exiting={FadeOutLeft} className="w-full">
-            <View className="mb-6">
-              <View className="w-12 h-12 bg-emerald-500/10 rounded-2xl items-center justify-center mb-4">
-                <User size={24} color="#10b981" />
-              </View>
-              <Text className="text-white text-3xl font-bold">Como devemos te chamar?</Text>
-              <Text className="text-zinc-400 text-base mt-2">Use seu nome real para que a comunidade te reconheça.</Text>
-            </View>
-            
-            <TextInput
-              ref={inputRef}
-              className="text-white text-xl border-b border-zinc-700 py-4 w-full"
-              placeholder="Nome e Sobrenome"
-              placeholderTextColor="#52525b"
-              autoCapitalize="words"
-              value={formData.name}
-              onChangeText={t => setFormData({...formData, name: t})}
-              onSubmitEditing={validateStep}
-              returnKeyType="next"
-            />
-          </Animated.View>
-        );
-
-      case 'EMAIL':
-        return (
-          <Animated.View key="step2" entering={FadeInRight} exiting={FadeOutLeft} className="w-full">
-            <View className="mb-6">
-              <View className="w-12 h-12 bg-blue-500/10 rounded-2xl items-center justify-center mb-4">
-                <Mail size={24} color="#3b82f6" />
-              </View>
-              <Text className="text-white text-3xl font-bold">Qual seu e-mail?</Text>
-              <Text className="text-zinc-400 text-base mt-2">Enviaremos confirmações de compra e atualizações para lá.</Text>
-            </View>
-
-            <TextInput
-              ref={inputRef}
-              className="text-white text-xl border-b border-zinc-700 py-4 w-full"
-              placeholder="seu@email.com"
-              placeholderTextColor="#52525b"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={formData.email}
-              onChangeText={t => setFormData({...formData, email: t})}
-              onSubmitEditing={validateStep}
-              returnKeyType="next"
-            />
-          </Animated.View>
-        );
-
-      case 'PASSWORD':
-        return (
-          <Animated.View key="step3" entering={FadeInRight} exiting={FadeOutLeft} className="w-full">
-            <View className="mb-6">
-              <View className="w-12 h-12 bg-purple-500/10 rounded-2xl items-center justify-center mb-4">
-                <ShieldCheck size={24} color="#a855f7" />
-              </View>
-              <Text className="text-white text-3xl font-bold">Proteja sua conta</Text>
-              <Text className="text-zinc-400 text-base mt-2">Crie uma senha forte com letras, números e símbolos.</Text>
-            </View>
-
-            <View className="relative">
-              <TextInput
-                ref={inputRef}
-                className="text-white text-xl border-b border-zinc-700 py-4 w-full pr-10"
-                placeholder="Senha"
-                placeholderTextColor="#52525b"
-                secureTextEntry={!showPassword}
-                value={formData.password}
-                onChangeText={t => setFormData({...formData, password: t})}
-              />
-              <TouchableOpacity 
-                onPress={() => setShowPassword(!showPassword)}
-                className="absolute right-0 top-4"
-              >
-                {showPassword ? <EyeOff size={24} color="#71717a" /> : <Eye size={24} color="#71717a" />}
-              </TouchableOpacity>
-            </View>
-
-            <PasswordStrengthMeter password={formData.password} />
-
-            <TextInput
-              className="text-white text-xl border-b border-zinc-700 py-4 w-full mt-4"
-              placeholder="Confirmar Senha"
-              placeholderTextColor="#52525b"
-              secureTextEntry={!showPassword}
-              value={formData.confirmPassword}
-              onChangeText={t => setFormData({...formData, confirmPassword: t})}
-              onSubmitEditing={validateStep}
-              returnKeyType="done"
-            />
-          </Animated.View>
-        );
-    }
+  const goBack = () => {
+    if (stepIndex > 0) setStepIndex(stepIndex - 1);
+    else router.back();
   };
+
+  // --- ESTILOS ANIMADOS ---
+  const buttonStyle = useAnimatedStyle(() => ({
+    width: buttonWidth.value,
+    borderRadius: buttonRadius.value,
+  }));
+
+  const textButtonStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+    position: 'absolute', // Para não ocupar espaço quando invisível e permitir centralização do ícone
+  }));
+
+  const arrowButtonStyle = useAnimatedStyle(() => ({
+    // O ícone aparece quando o texto desaparece (inverso)
+    opacity: interpolate(contentOpacity.value, [0, 1], [1, 0]),
+    transform: [{ scale: interpolate(contentOpacity.value, [0, 1], [1, 0.5]) }]
+  }));
+
+  // Renderização da Tela de Sucesso
+  if (currentStepKey === 'SUCCESS') {
+    return (
+      <View className="flex-1 bg-zinc-950 items-center justify-center">
+        <LivingBackground />
+        <LottieView
+          source={config.lottie}
+          autoPlay
+          loop={false}
+          style={{ width: 300, height: 300 }}
+        />
+        <Animated.View entering={FadeInDown.delay(500)}>
+            <Text className="text-white text-3xl font-black text-center mt-4">Conta Criada!</Text>
+            <Text className="text-zinc-400 text-center mt-2">Preparando seu ambiente...</Text>
+        </Animated.View>
+      </View>
+    );
+  }
 
   return (
-    <View className="flex-1 bg-zinc-950">
+    <View className="flex-1">
       <StatusBar style="light" />
-      
-      {/* Header Fixo */}
-      <View className="pt-14 px-6 pb-4">
-        <View className="flex-row justify-between items-center">
-          <TouchableOpacity 
-            onPress={() => stepIndex > 0 ? setStepIndex(stepIndex - 1) : router.back()}
-            className="w-10 h-10 items-center justify-center rounded-full active:bg-zinc-900"
-          >
-            <ArrowLeft size={24} color="white" />
-          </TouchableOpacity>
-          
-          <Text className="text-zinc-500 font-medium">
-             Passo {stepIndex + 1} de {steps.length}
-          </Text>
+      <LivingBackground />
 
-          <View className="w-10" /> 
-        </View>
+      {/* Header Fixo */}
+      <View className="pt-14 px-6 flex-row items-center">
+        <TouchableOpacity onPress={goBack} className="p-2 -ml-2 rounded-full active:bg-white/10">
+          <ArrowLeft size={24} color="white" />
+        </TouchableOpacity>
         
-        <ProgressBar step={stepIndex} total={steps.length} />
+        {/* Barra de Progresso Minimalista */}
+        <View className="flex-1 flex-row h-1 bg-zinc-800 ml-4 rounded-full overflow-hidden gap-1">
+            {[0, 1, 2].map(i => (
+                <View 
+                    key={i} 
+                    className={`flex-1 rounded-full transition-all duration-500 ${i <= stepIndex ? 'bg-emerald-500' : 'bg-transparent'}`} 
+                />
+            ))}
+        </View>
       </View>
 
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1 px-8 justify-center"
+        className="flex-1"
       >
-        {/* Conteúdo do Wizard */}
-        <View className="min-h-[300px] justify-center">
-          {renderStepContent()}
+        <View className="flex-1 justify-center px-8">
+            
+            {/* Animação do Mascote (Lottie) */}
+            <Animated.View 
+                key={`lottie-${stepIndex}`} // Força re-render para reiniciar animação
+                entering={FadeIn.duration(600)} 
+                exiting={FadeOut.duration(200)}
+                className="items-center mb-8 h-40 justify-center"
+            >
+                <LottieView
+                    source={config.lottie}
+                    autoPlay
+                    loop
+                    style={{ width: 180, height: 180 }}
+                />
+            </Animated.View>
+
+            {/* Textos e Inputs */}
+            <Animated.View 
+                key={`text-${stepIndex}`}
+                entering={FadeInDown.springify()}
+                className="w-full"
+            >
+                <Text className="text-white text-3xl font-black mb-2">{config.title}</Text>
+                <Text className="text-zinc-400 text-base mb-8">{config.subtitle}</Text>
+
+                <View className={`border-b-2 py-2 flex-row items-center ${error ? 'border-red-500' : 'border-zinc-700 focus:border-emerald-500'}`}>
+                    <TextInput
+                        ref={inputRef}
+                        className="flex-1 text-white text-2xl font-medium"
+                        placeholder={config.placeholder}
+                        placeholderTextColor="#52525b"
+                        value={currentStepKey === 'NAME' ? formData.name : currentStepKey === 'EMAIL' ? formData.email : formData.password}
+                        onChangeText={(t) => {
+                            setError('');
+                            if (currentStepKey === 'NAME') setFormData({...formData, name: t});
+                            else if (currentStepKey === 'EMAIL') setFormData({...formData, email: t});
+                            else setFormData({...formData, password: t});
+                        }}
+                        autoCapitalize={currentStepKey === 'NAME' ? 'words' : 'none'}
+                        keyboardType={currentStepKey === 'EMAIL' ? 'email-address' : 'default'}
+                        secureTextEntry={currentStepKey === 'PASSWORD'}
+                        onSubmitEditing={validateAndNext}
+                        returnKeyType="next"
+                    />
+                </View>
+                
+                {/* Mensagem de Erro Inline */}
+                {error ? (
+                    <Animated.Text entering={FadeIn} className="text-red-500 mt-2 font-bold">{error}</Animated.Text>
+                ) : null}
+
+            </Animated.View>
         </View>
 
-        {/* Alerta de Erro Customizado */}
-        {error && (
-          <Animated.View entering={FadeInDown} className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex-row items-center gap-3 mt-4 mb-4">
-            <View className="bg-red-500 rounded-full p-1">
-              <X size={12} color="white" />
-            </View>
-            <Text className="text-red-400 flex-1 font-medium">{error}</Text>
-          </Animated.View>
-        )}
+        {/* --- MORPHING BUTTON --- */}
+        <View className="items-center pb-8 pt-4">
+            <TouchableOpacity 
+                activeOpacity={0.8} 
+                onPress={validateAndNext}
+                disabled={loading}
+            >
+                <Animated.View 
+                    style={[buttonStyle]}
+                    className={`h-16 bg-emerald-500 items-center justify-center shadow-lg shadow-emerald-500/20 overflow-hidden relative`}
+                >
+                    {loading ? (
+                        <ActivityIndicator color="black" />
+                    ) : (
+                        <>
+                            {/* Texto (Visível quando teclado fechado) */}
+                            <Animated.Text 
+                                style={[textButtonStyle]} 
+                                className="text-zinc-950 font-black text-lg tracking-wide uppercase"
+                            >
+                                {stepIndex === 2 ? 'Finalizar' : 'Continuar'}
+                            </Animated.Text>
+
+                            {/* Ícone (Visível quando teclado aberto ou transição) */}
+                            {/* Usamos absolute para garantir que ele esteja centralizado no círculo */}
+                            <Animated.View style={[arrowButtonStyle, { position: 'absolute' }]}>
+                                {stepIndex === 2 ? (
+                                    <Check size={28} color="#09090b" strokeWidth={3} />
+                                ) : (
+                                    <ArrowRight size={28} color="#09090b" strokeWidth={3} />
+                                )}
+                            </Animated.View>
+                        </>
+                    )}
+                </Animated.View>
+            </TouchableOpacity>
+        </View>
 
       </KeyboardAvoidingView>
-
-      {/* Footer com Botão de Ação */}
-      <View className="px-8 pb-10 pt-4 bg-zinc-950">
-        <TouchableOpacity
-          onPress={validateStep}
-          disabled={isLoading}
-          className={`w-full h-14 rounded-2xl flex-row items-center justify-center shadow-lg shadow-emerald-900/20 
-            ${isLoading ? 'bg-zinc-800' : 'bg-emerald-500'}`}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#10b981" />
-          ) : (
-            <>
-              <Text className="text-zinc-950 font-bold text-lg mr-2">
-                {stepIndex === steps.length - 1 ? 'Criar Conta' : 'Continuar'}
-              </Text>
-              {stepIndex < steps.length - 1 && <ArrowRight size={20} color="#09090b" strokeWidth={3} />}
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
