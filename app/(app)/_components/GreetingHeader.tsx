@@ -72,7 +72,7 @@ const SmartBadge = () => {
     );
 };
 
-// --- JOYSTICK ANIMADO (NOVO) ---
+// --- JOYSTICK ANIMADO (GAMES) ---
 const JoystickButton = () => {
     const router = useRouter();
     const rotation = useSharedValue(0);
@@ -104,7 +104,8 @@ const JoystickButton = () => {
 
     return (
         <TouchableOpacity
-            onPress={() => router.push('/(app)/games' as any)}
+            // CORREÇÃO CRÍTICA: Apontando direto para o arquivo index da pasta games
+            onPress={() => router.push('/(app)/games/index')}
             onPressIn={onPressIn}
             onPressOut={onPressOut}
             activeOpacity={1}
@@ -113,6 +114,7 @@ const JoystickButton = () => {
              <Animated.View style={animatedStyle}>
                 <Gamepad2 size={20} color="#10b981" fill="#10b981" fillOpacity={0.2} />
              </Animated.View>
+             {/* Indicador de novidade */}
              <View className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-zinc-900" />
         </TouchableOpacity>
     );

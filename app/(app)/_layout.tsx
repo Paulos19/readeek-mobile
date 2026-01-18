@@ -12,49 +12,55 @@ export default function AppLayout() {
         animation: 'shift',
       }}
     >
-      {/* --- ABAS VISÍVEIS --- */}
+      {/* --- ABAS PRINCIPAIS --- */}
       <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
       <Tabs.Screen name="library" options={{ title: 'Library' }} />
       <Tabs.Screen name="social" options={{ title: 'Social' }} />
       <Tabs.Screen name="community" options={{ title: 'Communities' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
 
-      {/* --- ROTAS INTERNAS (HIDDEN) --- */}
-
-      {/* CORREÇÃO: Agora referenciamos a PASTA games (o _layout dela) */}
+      {/* --- ROTAS GAMES (Correção aplicada) --- */}
       <Tabs.Screen 
-        name="games" 
+        name="games/index" 
         options={{ 
           href: null, 
           headerShown: false,
-          tabBarStyle: { display: 'none' } // Garante que a TabBar suma em TODAS as telas de games
+          tabBarStyle: { display: 'none' } 
         }} 
       />
 
       <Tabs.Screen 
-        name="writer" 
+        name="games/create" 
         options={{ 
-          href: null,
-          tabBarStyle: { display: 'none' },
-          headerShown: false 
+          href: null, 
+          headerShown: false,
+          tabBarStyle: { display: 'none' } 
         }} 
       />
 
       <Tabs.Screen 
-        name="read/[bookId]/index" 
-        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+        name="games/[id]/play" 
+        options={{ 
+          href: null, 
+          headerShown: false,
+          tabBarStyle: { display: 'none' }
+        }} 
       />
-      
-      {/* Chat e Shop mantidos iguais... */}
+
+      {/* --- ROTAS SHOP --- */}
+      <Tabs.Screen name="shop/index" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen name="shop/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen name="shop/create" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen name="product/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+
+      {/* --- OUTRAS ROTAS --- */}
+      <Tabs.Screen name="writer" options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }} />
+      <Tabs.Screen name="read/[bookId]/index" options={{ href: null, tabBarStyle: { display: 'none' } }} />
       <Tabs.Screen name="chat/index" options={{ href: null, tabBarStyle: { display: 'none' } }} />
       <Tabs.Screen name="chat/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
       <Tabs.Screen name="chat/settings" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="product/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="shop/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="shop/index" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="shop/create" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="users/[id]" options={{ href: null }} />
-      <Tabs.Screen name="social/create" options={{ href: null }} />
+      <Tabs.Screen name="users/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen name="social/create" options={{ href: null, tabBarStyle: { display: 'none' } }} />
     </Tabs>
   );
 }

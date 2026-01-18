@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, RefreshControl, ScrollView, StatusBar, Im
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TrendingUp, Users, BookOpen, Download, CheckCircle2, WifiOff, Trophy, ChevronRight, Sparkles } from 'lucide-react-native';
+import { TrendingUp, Users, BookOpen, Download, CheckCircle2, WifiOff, Trophy, ChevronRight, Sparkles, Gamepad2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // API & Libs
@@ -43,6 +43,42 @@ const SectionHeader = React.memo(({ title, subtitle, icon: Icon, color = "#10b98
         )}
     </View>
 ));
+
+const GameArcadeCard = React.memo(() => {
+    const router = useRouter();
+    return (
+        <TouchableOpacity 
+            activeOpacity={0.9}
+            // Navegação explícita para o arquivo index, evitando redirecionamento errado
+            onPress={() => router.push('/(app)/games/index' as any)}
+            className="mx-6 mb-8 h-28 rounded-[24px] overflow-hidden relative border border-emerald-500/20 shadow-lg shadow-emerald-900/20"
+        >
+            <Image 
+                source={{ uri: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=2070&auto=format&fit=crop' }} 
+                className="absolute w-full h-full opacity-80"
+                resizeMode="cover"
+            />
+            <LinearGradient
+                colors={['rgba(6, 78, 59, 0.9)', 'rgba(6, 95, 70, 0.4)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                className="absolute inset-0 flex-row items-center justify-between px-6"
+            >
+                <View>
+                    <View className="bg-emerald-500/20 self-start px-2 py-0.5 rounded-md mb-1 border border-emerald-500/30">
+                        <Text className="text-emerald-300 font-bold text-[10px] uppercase tracking-widest">Arcade</Text>
+                    </View>
+                    <Text className="text-white font-black text-2xl shadow-sm italic">Sala de Games</Text>
+                    <Text className="text-emerald-100 text-xs font-medium mt-0.5">Jogue, crie e ganhe créditos.</Text>
+                </View>
+                
+                <View className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg shadow-black/40">
+                    <Gamepad2 size={24} color="#059669" fill="#059669" />
+                </View>
+            </LinearGradient>
+        </TouchableOpacity>
+    );
+});
 
 const ModernBookCard = React.memo(({ book, onPress, showProgress = true }: { book: Book, onPress: (book: Book) => void, showProgress?: boolean }) => (
     <TouchableOpacity onPress={() => onPress(book)} activeOpacity={0.8} className="mr-4 w-[140px]">
@@ -292,7 +328,10 @@ export default function Dashboard() {
                         />
                     </View>
 
-                    {/* Seção Writer Studio - Destaque Principal */}
+                    {/* CARD DA SALA DE GAMES (NOVO) */}
+                    <GameArcadeCard />
+
+                    {/* Seção Writer Studio */}
                     <View className="mb-2">
                         <WriterCallCard />
                     </View>
