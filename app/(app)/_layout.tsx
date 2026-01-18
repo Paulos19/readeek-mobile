@@ -38,19 +38,30 @@ export default function AppLayout() {
         options={{ title: 'Profile' }} 
       />
 
-      {/* --- ROTAS OCULTAS DA TABBAR (Imersivas) --- */}
+      {/* --- ROTAS OCULTAS / INTERNAS --- */}
 
-      {/* 1. Games (Correção do Bug de Redirecionamento) */}
+      {/* CORREÇÃO 1: Rota da Lista de Games (Marketplace) */}
+      {/* O nome deve ser 'games/index' pois não há layout intermediário */}
       <Tabs.Screen 
-        name="games" 
+        name="games/index" 
         options={{ 
-          href: null, // Não exibe botão na barra
+          href: null, 
           headerShown: false,
-          tabBarStyle: { display: 'none' } // Remove a barra fisicamente para imersão total
+          tabBarStyle: { display: 'none' } // Remove a barra para imersão total
         }} 
       />
 
-      {/* 2. Writer (Editor) */}
+      {/* CORREÇÃO 2: Rota do Player de Games */}
+      {/* Precisamos garantir que o Player também não mostre a TabBar */}
+      <Tabs.Screen 
+        name="games/[id]/play" 
+        options={{ 
+          href: null, 
+          headerShown: false,
+          tabBarStyle: { display: 'none' }
+        }} 
+      />
+
       <Tabs.Screen 
         name="writer" 
         options={{ 
@@ -60,13 +71,12 @@ export default function AppLayout() {
         }} 
       />
 
-      {/* 3. Leitor de Livros */}
       <Tabs.Screen 
         name="read/[bookId]/index" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
       />
       
-      {/* 4. Chat (Lista e Detalhe) */}
+      {/* Chat */}
       <Tabs.Screen 
         name="chat/index" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
@@ -75,8 +85,12 @@ export default function AppLayout() {
         name="chat/[id]" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
       />
+      <Tabs.Screen 
+        name="chat/settings" // É bom registrar todas as rotas conhecidas se quiser controlar a tabbar
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
 
-      {/* 5. Marketplace e Produtos */}
+      {/* Shop e Produtos */}
        <Tabs.Screen 
         name="product/[id]" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
@@ -85,6 +99,18 @@ export default function AppLayout() {
         name="shop/[id]" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
       />
+      <Tabs.Screen 
+        name="shop/index" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="shop/create" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+
+      {/* Outras rotas internas listadas no erro */}
+      <Tabs.Screen name="users/[id]" options={{ href: null }} />
+      <Tabs.Screen name="social/create" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, Image, TouchableOpacity, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Gamepad2, Plus, Play, Lock, Coins } from 'lucide-react-native';
+import { Gamepad2, Plus, Play, Lock, Coins, ChevronLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { gameService } from '../../../lib/api';
@@ -121,10 +121,20 @@ export default function GamesMarketplace() {
       <StatusBar style="light" />
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* HEADER ATUALIZADO COM BOTÃO VOLTAR */}
       <View className="pt-14 px-6 pb-6 bg-zinc-950 border-b border-zinc-900 flex-row justify-between items-center">
-        <View>
-          <Text className="text-emerald-500 font-bold text-xs tracking-widest uppercase mb-1">Arcade</Text>
-          <Text className="text-white font-serif text-3xl font-bold">Sala de Games</Text>
+        <View className="flex-row items-center gap-4">
+            <TouchableOpacity 
+                onPress={() => router.back()} 
+                className="w-10 h-10 rounded-full bg-zinc-900 items-center justify-center border border-zinc-800"
+            >
+                <ChevronLeft size={24} color="#fff" />
+            </TouchableOpacity>
+
+            <View>
+                <Text className="text-emerald-500 font-bold text-xs tracking-widest uppercase mb-1">Arcade</Text>
+                <Text className="text-white font-serif text-3xl font-bold">Sala de Games</Text>
+            </View>
         </View>
 
         <View className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-full flex-row items-center gap-2">
