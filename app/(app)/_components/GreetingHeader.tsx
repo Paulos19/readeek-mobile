@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, ImageBackground, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Bell, Search, ChevronRight, BookOpen, Play, ShoppingCart, Sparkles } from 'lucide-react-native';
+import { Bell, Search, ChevronRight, BookOpen, Play, ShoppingCart, Sparkles, Gamepad2 } from 'lucide-react-native';
 import Animated, { 
   FadeInDown, 
   FadeInUp,
@@ -13,7 +13,6 @@ import Animated, {
   withDelay,
   withRepeat,
   interpolate,
-  Extrapolation,
   Easing
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,9 +39,7 @@ interface GreetingHeaderProps {
   onContinueReading: (book: MinimalBook) => void;
 }
 
-const { width } = Dimensions.get('window');
-
-// --- BADGE INTELIGENTE ---
+// --- BADGE INTELIGENTE (SHOP) ---
 const SmartBadge = () => {
     const progress = useSharedValue(0);
     const shake = useSharedValue(0);
@@ -72,6 +69,54 @@ const SmartBadge = () => {
         <Animated.View style={[containerStyle, { position: 'absolute', zIndex: 20, borderRadius: 999, overflow: 'hidden' }]}>
             <LinearGradient colors={['#f472b6', '#a78bfa']} style={{ width: '100%', height: '100%' }} />
         </Animated.View>
+    );
+};
+
+// --- JOYSTICK ANIMADO (NOVO) ---
+const JoystickButton = () => {
+    const router = useRouter();
+    const rotation = useSharedValue(0);
+    const scale = useSharedValue(1);
+
+    useEffect(() => {
+        // Animação periódica para chamar atenção (Wiggle)
+        const interval = setInterval(() => {
+            rotation.value = withSequence(
+                withTiming(-15, { duration: 100 }),
+                withTiming(15, { duration: 100 }),
+                withTiming(-15, { duration: 100 }),
+                withTiming(15, { duration: 100 }),
+                withTiming(0, { duration: 100 })
+            );
+        }, 5000); // A cada 5 segundos
+
+        return () => clearInterval(interval);
+    }, []);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { rotate: `${rotation.value}deg` },
+            { scale: scale.value }
+        ]
+    }));
+
+    const onPressIn = () => { scale.value = withSpring(0.9); };
+    const onPressOut = () => { scale.value = withSpring(1); };
+
+    return (
+        <TouchableOpacity
+            onPress={() => router.push('/(app)/games' as any)}
+            onPressIn={onPressIn}
+            onPressOut={onPressOut}
+            activeOpacity={1}
+            className="w-10 h-10 rounded-full bg-zinc-900/60 border border-emerald-500/30 items-center justify-center relative backdrop-blur-md"
+        >
+             <Animated.View style={animatedStyle}>
+                <Gamepad2 size={20} color="#10b981" fill="#10b981" fillOpacity={0.2} />
+             </Animated.View>
+             {/* Pequeno indicador de "Novo" ou destaque */}
+             <View className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-zinc-900" />
+        </TouchableOpacity>
     );
 };
 
@@ -203,6 +248,7 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
         </Animated.View>
 
         <View className="flex-row items-center gap-2">
+            <JoystickButton /> {/* NOVO BOTÃO DE GAMES */}
             <IconButton icon={Search} onPress={() => setShowSearch(true)} />
             <IconButton icon={ShoppingCart} showSmartBadge={hasNewProducts} onPress={handleOpenShop} />
             <IconButton icon={Bell} badgeCount={unreadCount} onPress={() => setShowNotifications(true)} />

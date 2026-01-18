@@ -2,6 +2,7 @@ import axios from 'axios';
 import { storage } from './storage';
 import { PublicUserProfile } from 'app/(app)/_types/user';
 import { Book } from 'app/(app)/_types/book';
+import { Game } from 'app/(app)/_types/game';
 
 // IMPORTANTE: Mude para o IP da sua máquina se estiver testando no device físico
 const API_URL = 'https://readeek.vercel.app/api'; 
@@ -768,6 +769,52 @@ export const aiService = {
     // Ajuste a URL conforme seu ambiente local ou prod
     const response = await api.post('/mobile/writer/ai/fix', { text });
     return response.data;
+  }
+};
+
+export const gameService = {
+  // Busca o feed de jogos
+  getAll: async () => {
+    try {
+      const { data } = await api.get('/mobile/games');
+      return data as Game[];
+    } catch (error) {
+      console.error("Erro ao buscar games:", error);
+      return [];
+    }
+  },
+
+  // Compra ou Joga (A lógica de debitar créditos é no backend)
+  buyOrPlay: async (gameId: string) => {
+    try {
+      const { data } = await api.post(`/mobile/games/${gameId}/buy`);
+      return { success: true, data };
+    } catch (error: any) {
+      // Tratamento especial para erro 402 (Sem saldo)
+      if (error.response?.status === 402) {
+        return { success: false, error: 'insufficient_funds' };
+      }
+      return { success: false, error: 'generic' };
+    }
+  },
+
+  // Criação do Jogo
+  create: async (payload: {
+    title: string;
+    description: string;
+    htmlContent: string;
+    orientation: 'PORTRAIT' | 'LANDSCAPE';
+    mode: 'IMPORT' | 'CREATE'; // IMPORT (45c) ou CREATE (60c)
+  }) => {
+    try {
+      const { data } = await api.post('/mobile/games/create', payload);
+      return { success: true, game: data };
+    } catch (error: any) {
+      if (error.response?.status === 402) {
+        return { success: false, error: 'insufficient_funds' };
+      }
+      return { success: false, error: error.message };
+    }
   }
 };
 
