@@ -12,6 +12,7 @@ export default function AppLayout() {
         animation: 'shift',
       }}
     >
+      {/* --- ROTAS PRINCIPAIS (Visíveis na TabBar) --- */}
       <Tabs.Screen 
         name="dashboard" 
         options={{ title: 'Dashboard' }} 
@@ -37,28 +38,45 @@ export default function AppLayout() {
         options={{ title: 'Profile' }} 
       />
 
-      {/* --- CORREÇÃO AQUI --- */}
-      {/* Registramos o Writer para sumir com a TabBar de forma declarativa */}
+      {/* --- ROTAS OCULTAS DA TABBAR (Imersivas) --- */}
+
+      {/* 1. Games (Correção do Bug de Redirecionamento) */}
+      <Tabs.Screen 
+        name="games" 
+        options={{ 
+          href: null, // Não exibe botão na barra
+          headerShown: false,
+          tabBarStyle: { display: 'none' } // Remove a barra fisicamente para imersão total
+        }} 
+      />
+
+      {/* 2. Writer (Editor) */}
       <Tabs.Screen 
         name="writer" 
         options={{ 
-          href: null, // Não cria botão na barra
-          tabBarStyle: { display: 'none' }, // Remove a barra fisicamente
+          href: null,
+          tabBarStyle: { display: 'none' },
           headerShown: false 
         }} 
       />
 
-      {/* Rotas ocultas da TabBar (Detail Pages) */}
+      {/* 3. Leitor de Livros */}
       <Tabs.Screen 
         name="read/[bookId]/index" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
       />
       
-      {/* Outras rotas que não devem ter tab bar (ex: chat, shop details) devem seguir esse padrão */}
+      {/* 4. Chat (Lista e Detalhe) */}
+      <Tabs.Screen 
+        name="chat/index" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
       <Tabs.Screen 
         name="chat/[id]" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 
       />
+
+      {/* 5. Marketplace e Produtos */}
        <Tabs.Screen 
         name="product/[id]" 
         options={{ href: null, tabBarStyle: { display: 'none' } }} 

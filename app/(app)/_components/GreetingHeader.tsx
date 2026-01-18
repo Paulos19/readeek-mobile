@@ -79,7 +79,6 @@ const JoystickButton = () => {
     const scale = useSharedValue(1);
 
     useEffect(() => {
-        // Animação periódica para chamar atenção (Wiggle)
         const interval = setInterval(() => {
             rotation.value = withSequence(
                 withTiming(-15, { duration: 100 }),
@@ -88,7 +87,7 @@ const JoystickButton = () => {
                 withTiming(15, { duration: 100 }),
                 withTiming(0, { duration: 100 })
             );
-        }, 5000); // A cada 5 segundos
+        }, 5000); 
 
         return () => clearInterval(interval);
     }, []);
@@ -114,7 +113,6 @@ const JoystickButton = () => {
              <Animated.View style={animatedStyle}>
                 <Gamepad2 size={20} color="#10b981" fill="#10b981" fillOpacity={0.2} />
              </Animated.View>
-             {/* Pequeno indicador de "Novo" ou destaque */}
              <View className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-zinc-900" />
         </TouchableOpacity>
     );
@@ -154,7 +152,9 @@ const IconButton = ({ icon: Icon, onPress, badgeCount = 0, showSmartBadge = fals
     className="w-10 h-10 rounded-full bg-zinc-900/60 border border-zinc-700/50 items-center justify-center relative backdrop-blur-md"
   >
     <Icon size={18} color={badgeCount > 0 || showSmartBadge ? "white" : "#a1a1aa"} />
-    {badgeCount > 0 && !showSmartBadge && <View className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-zinc-900" />}
+    {badgeCount > 0 && !showSmartBadge && (
+        <View className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border border-zinc-900" />
+    )}
     {showSmartBadge && <SmartBadge />}
   </TouchableOpacity>
 );
@@ -230,7 +230,7 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
       />
       <SearchSheet visible={showSearch} onClose={() => setShowSearch(false)} topOffset={120} />
 
-      {/* --- HEADER SUPERIOR (Compacto) --- */}
+      {/* --- HEADER SUPERIOR --- */}
       <View className="flex-row items-center justify-between mb-6 mt-2">
         <Animated.View entering={FadeInDown.duration(600)} className="flex-row items-center gap-3 flex-1">
           <TouchableOpacity onPress={() => router.push(`/(app)/profile/${user?.id}` as any)}>
@@ -248,14 +248,14 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
         </Animated.View>
 
         <View className="flex-row items-center gap-2">
-            <JoystickButton /> {/* NOVO BOTÃO DE GAMES */}
+            <JoystickButton />
             <IconButton icon={Search} onPress={() => setShowSearch(true)} />
             <IconButton icon={ShoppingCart} showSmartBadge={hasNewProducts} onPress={handleOpenShop} />
             <IconButton icon={Bell} badgeCount={unreadCount} onPress={() => setShowNotifications(true)} />
         </View>
       </View>
 
-      {/* --- CARD "LENDO AGORA" MÁGICO --- */}
+      {/* --- CARD LENDO AGORA --- */}
       {lastReadBook ? (
         <Animated.View entering={FadeInUp.delay(300).springify()} className="w-full">
             <TouchableOpacity 
@@ -264,7 +264,7 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
                 className="overflow-hidden rounded-[28px] relative bg-zinc-900 border border-zinc-800/50 shadow-2xl shadow-black/80"
                 style={{ height: 220 }}
             >
-                {/* 1. Imagem de Fundo (Blur/Atmosfera) */}
+                {/* 1. Imagem de Fundo (Blur) */}
                 {lastReadBook.coverUrl ? (
                     <ImageBackground 
                         source={{ uri: lastReadBook.coverUrl }} 
@@ -278,14 +278,14 @@ export function GreetingHeader({ user, lastReadBook, onContinueReading }: Greeti
                     />
                 )}
 
-                {/* 2. Overlay Gradiente para legibilidade */}
+                {/* 2. Overlay Gradiente */}
                 <LinearGradient
                     colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)', '#09090b']}
                     locations={[0, 0.5, 1]}
                     className="absolute inset-0"
                 />
 
-                {/* 3. Partículas Mágicas */}
+                {/* 3. Partículas */}
                 <MagicSparkle delay={0} style={{ top: 20, right: 40 }} />
                 <MagicSparkle delay={1000} style={{ bottom: 60, left: 30 }} />
 
