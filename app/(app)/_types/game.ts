@@ -5,6 +5,11 @@ export interface Game {
   title: string;
   description: string | null;
   coverUrl: string | null;
+  
+  // Adicionado para suportar o código do jogo
+  // É opcional (?) pois na listagem geral (feed) esse campo não deve vir para economizar dados
+  htmlContent?: string; 
+
   orientation: GameOrientation;
   price: number;
   plays: number;
@@ -14,6 +19,6 @@ export interface Game {
     name: string | null;
     image: string | null;
   };
-  isOwned: boolean; // Flag crítica que vem do backend
+  isOwned: boolean;
   createdAt: string;
 }

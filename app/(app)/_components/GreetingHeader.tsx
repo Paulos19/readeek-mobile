@@ -105,7 +105,7 @@ const JoystickButton = () => {
     return (
         <TouchableOpacity
             // CORREÇÃO CRÍTICA: Apontando direto para o arquivo index da pasta games
-            onPress={() => router.push('/(app)/games/index')}
+            onPress={() => router.push('/(app)/games')}
             onPressIn={onPressIn}
             onPressOut={onPressOut}
             activeOpacity={1}

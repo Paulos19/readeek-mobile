@@ -50,7 +50,7 @@ const GameArcadeCard = React.memo(() => {
         <TouchableOpacity 
             activeOpacity={0.9}
             // Navegação explícita para o arquivo index, evitando redirecionamento errado
-            onPress={() => router.push('/(app)/games/index' as any)}
+            onPress={() => router.push('/(app)/games')}
             className="mx-6 mb-8 h-28 rounded-[24px] overflow-hidden relative border border-emerald-500/20 shadow-lg shadow-emerald-900/20"
         >
             <Image 

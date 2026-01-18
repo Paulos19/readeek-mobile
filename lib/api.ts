@@ -5,7 +5,7 @@ import { Book } from 'app/(app)/_types/book';
 import { Game } from 'app/(app)/_types/game';
 
 // IMPORTANTE: Mude para o IP da sua máquina se estiver testando no device físico
-const API_URL = 'https://readeek.vercel.app/api'; 
+const API_URL = 'https://readeek.vercel.app/api';
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -35,10 +35,10 @@ api.interceptors.response.use(
 );
 
 export interface Highlight {
-    id: string;
-    cfiRange: string;
-    text: string;
-    color: string;
+  id: string;
+  cfiRange: string;
+  text: string;
+  color: string;
 }
 
 export interface ShopDetails {
@@ -71,7 +71,7 @@ export interface ProductDetailsResponse {
     };
   };
   relatedProducts: MarketProduct[];
-  communityBooks: Book[]; 
+  communityBooks: Book[];
 }
 
 export interface MarketProduct {
@@ -84,8 +84,8 @@ export interface MarketProduct {
   stock: number;
   images: ProductImage[];
   shop?: {
-      name: string;
-      imageUrl: string | null;
+    name: string;
+    imageUrl: string | null;
   };
 }
 
@@ -209,68 +209,68 @@ export const syncProgress = async (bookId: string, cfi: string, percentage: numb
 };
 
 export const highlightService = {
-    getByBook: async (bookId: string) => {
-        const res = await api.get(`/mobile/highlights?bookId=${bookId}`);
-        return res.data as Highlight[];
-    },
-    
-    create: async (bookId: string, cfiRange: string, text: string, color: string) => {
-        const res = await api.post('/mobile/highlights', { bookId, cfiRange, text, color });
-        return res.data as Highlight;
-    },
+  getByBook: async (bookId: string) => {
+    const res = await api.get(`/mobile/highlights?bookId=${bookId}`);
+    return res.data as Highlight[];
+  },
 
-    delete: async (id: string) => {
-        await api.delete(`/mobile/highlights?id=${id}`);
-    }
+  create: async (bookId: string, cfiRange: string, text: string, color: string) => {
+    const res = await api.post('/mobile/highlights', { bookId, cfiRange, text, color });
+    return res.data as Highlight;
+  },
+
+  delete: async (id: string) => {
+    await api.delete(`/mobile/highlights?id=${id}`);
+  }
 };
 
 export const registerDownload = async (bookId: string) => {
-    try {
-        const response = await api.post('/mobile/books/download', { bookId });
-        return response.data.newBookId; 
-    } catch (error) {
-        console.error("[API] Falha ao registrar download", error);
-        return null;
-    }
+  try {
+    const response = await api.post('/mobile/books/download', { bookId });
+    return response.data.newBookId;
+  } catch (error) {
+    console.error("[API] Falha ao registrar download", error);
+    return null;
+  }
 };
 
 export const repairBookMetadata = async (bookId: string) => {
-    try {
-        const response = await api.post('/mobile/books/refresh', { bookId });
-        if (response.data.updated) {
-            console.log("[Metadata] Livro atualizado com sucesso:", response.data.book.title);
-            return response.data.book; 
-        }
-        return null; 
-    } catch (error) {
-        console.error("[Metadata] Falha ao tentar reparar metadados:", error);
-        return null;
+  try {
+    const response = await api.post('/mobile/books/refresh', { bookId });
+    if (response.data.updated) {
+      console.log("[Metadata] Livro atualizado com sucesso:", response.data.book.title);
+      return response.data.book;
     }
+    return null;
+  } catch (error) {
+    console.error("[Metadata] Falha ao tentar reparar metadados:", error);
+    return null;
+  }
 };
 
 export const uploadBook = async (fileUri: string, fileName: string, mimeType: string) => {
-    try {
-        const formData = new FormData();
-        const fileData = {
-            uri: fileUri,
-            name: fileName,
-            type: mimeType || 'application/epub+zip'
-        } as any; 
+  try {
+    const formData = new FormData();
+    const fileData = {
+      uri: fileUri,
+      name: fileName,
+      type: mimeType || 'application/epub+zip'
+    } as any;
 
-        formData.append('file', fileData);
+    formData.append('file', fileData);
 
-        const response = await api.post('/mobile/books', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+    const response = await api.post('/mobile/books', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
 
-        return { success: true, data: response.data };
-    } catch (error: any) {
-        if (error.response && error.response.status === 409) {
-            return { success: false, error: 'duplicate', message: error.response.data.message };
-        }
-        console.error("Erro no upload:", error);
-        return { success: false, error: 'upload_failed' };
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    if (error.response && error.response.status === 409) {
+      return { success: false, error: 'duplicate', message: error.response.data.message };
     }
+    console.error("Erro no upload:", error);
+    return { success: false, error: 'upload_failed' };
+  }
 };
 
 export const profileService = {
@@ -282,12 +282,12 @@ export const profileService = {
       if (data.name) formData.append('name', data.name);
       if (data.about) formData.append('about', data.about);
       if (data.profileVisibility) formData.append('profileVisibility', data.profileVisibility);
-      
+
       if (data.image) {
         const uri = data.image;
         const fileType = uri.split('.').pop();
         const mimeType = fileType === 'png' ? 'image/png' : 'image/jpeg';
-        
+
         formData.append('image', {
           uri,
           name: `avatar.${fileType}`,
@@ -301,42 +301,42 @@ export const profileService = {
       return res.data;
 
     } else {
-      const { image, ...textData } = data; 
+      const { image, ...textData } = data;
       const res = await api.patch('/mobile/profile/update', textData);
       return res.data;
     }
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
-     const res = await api.post('/mobile/auth/change-password', { currentPassword, newPassword });
-     return res.data;
+    const res = await api.post('/mobile/auth/change-password', { currentPassword, newPassword });
+    return res.data;
   }
 };
 
 export const communityService = {
   getAll: async () => {
     const res = await api.get('/mobile/communities');
-    return res.data; 
+    return res.data;
   },
-  
+
   getById: async (id: string) => {
     const res = await api.get(`/mobile/communities/${id}`);
-    return res.data; 
+    return res.data;
   },
 
   searchMembers: async (communityId: string, query: string) => {
     const res = await api.get(`/mobile/communities/${communityId}/members/search`, {
       params: { query }
     });
-    return res.data; 
+    return res.data;
   },
 
-  create: async (data: { 
-    name: string; 
-    description: string; 
-    visibility: 'public' | 'private'; 
+  create: async (data: {
+    name: string;
+    description: string;
+    visibility: 'public' | 'private';
     password?: string;
-    coverUri?: string; 
+    coverUri?: string;
   }) => {
     const formData = new FormData();
     formData.append('name', data.name);
@@ -345,19 +345,19 @@ export const communityService = {
     if (data.password) formData.append('password', data.password);
 
     if (data.coverUri) {
-        const filename = data.coverUri.split('/').pop() || 'cover.jpg';
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : `image/jpeg`;
-        
-        formData.append('cover', {
-            uri: data.coverUri,
-            name: filename,
-            type,
-        } as any);
+      const filename = data.coverUri.split('/').pop() || 'cover.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      formData.append('cover', {
+        uri: data.coverUri,
+        name: filename,
+        type,
+      } as any);
     }
 
     const res = await api.post('/mobile/communities', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return res.data;
   },
@@ -393,7 +393,7 @@ export const communityService = {
 
   toggleLike: async (postId: string) => {
     const res = await api.post(`/mobile/communities/posts/${postId}/react`, { emoji: '❤️' });
-    return res.data; 
+    return res.data;
   },
 
   getComments: async (postId: string) => {
@@ -402,9 +402,9 @@ export const communityService = {
   },
 
   createComment: async (postId: string, content: string, parentId?: string) => {
-    const res = await api.post(`/mobile/communities/posts/${postId}/comments`, { 
-      content, 
-      parentId 
+    const res = await api.post(`/mobile/communities/posts/${postId}/comments`, {
+      content,
+      parentId
     });
     return res.data;
   },
@@ -423,11 +423,11 @@ export const socialService = {
 
   searchUsers: async (query: string) => {
     try {
-        const res = await api.get('/mobile/users/search', { params: { query } });
-        return res.data;
+      const res = await api.get('/mobile/users/search', { params: { query } });
+      return res.data;
     } catch (e) {
-        console.warn('API de busca de usuários não disponível');
-        return [];
+      console.warn('API de busca de usuários não disponível');
+      return [];
     }
   },
 
@@ -435,28 +435,28 @@ export const socialService = {
     const { content, type, bookId, imageUri } = data;
 
     if (imageUri) {
-        const formData = new FormData();
-        formData.append('content', content);
-        formData.append('type', type);
-        if (bookId) formData.append('bookId', bookId);
+      const formData = new FormData();
+      formData.append('content', content);
+      formData.append('type', type);
+      if (bookId) formData.append('bookId', bookId);
 
-        const filename = imageUri.split('/').pop() || 'post.jpg';
-        const match = /\.(\w+)$/.exec(filename);
-        const mimeType = match ? `image/${match[1]}` : `image/jpeg`;
+      const filename = imageUri.split('/').pop() || 'post.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const mimeType = match ? `image/${match[1]}` : `image/jpeg`;
 
-        formData.append('image', {
-            uri: imageUri,
-            name: filename,
-            type: mimeType,
-        } as any);
+      formData.append('image', {
+        uri: imageUri,
+        name: filename,
+        type: mimeType,
+      } as any);
 
-        const res = await api.post('/mobile/social/posts', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        return res.data;
+      const res = await api.post('/mobile/social/posts', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data;
     } else {
-        const res = await api.post('/mobile/social/posts', { content, type, bookId });
-        return res.data;
+      const res = await api.post('/mobile/social/posts', { content, type, bookId });
+      return res.data;
     }
   },
 
@@ -481,16 +481,16 @@ export const socialService = {
   },
 
   createComment: async (postId: string, content: string, parentId?: string) => {
-    const res = await api.post(`/mobile/social/posts/${postId}/comments`, { 
-      content, 
-      parentId 
+    const res = await api.post(`/mobile/social/posts/${postId}/comments`, {
+      content,
+      parentId
     });
     return res.data;
   },
 
   toggleCommentLike: async (commentId: string) => {
     const res = await api.post(`/mobile/social/comments/${commentId}/react`);
-    return res.data; 
+    return res.data;
   }
 };
 
@@ -523,7 +523,7 @@ export const createShop = async (name: string, description: string, imageUri?: s
     const filename = imageUri.split('/').pop() || 'shop.jpg';
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : `image/jpeg`;
-    
+
     formData.append('image', {
       uri: imageUri,
       name: filename,
@@ -558,7 +558,7 @@ export const createProduct = async (data: {
     const filename = data.imageUri.split('/').pop() || 'product.jpg';
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : `image/jpeg`;
-    
+
     formData.append('image', {
       uri: data.imageUri,
       name: filename,
@@ -597,9 +597,9 @@ export const buyProductWithCredits = async (productId: string) => {
     const { data } = await api.post(`/mobile/marketplace/products/${productId}/buy`);
     return { success: true, data };
   } catch (error: any) {
-    return { 
-      success: false, 
-      error: error.response?.data?.error || "Erro ao realizar compra" 
+    return {
+      success: false,
+      error: error.response?.data?.error || "Erro ao realizar compra"
     };
   }
 };
@@ -615,7 +615,7 @@ export const getMyConversations = async (): Promise<Conversation[]> => {
 
 export const startConversation = async (targetUserId: string, productId?: string) => {
   const { data } = await api.post('/mobile/chat', { targetUserId, productId });
-  return data; 
+  return data;
 };
 
 export const getMessages = async (conversationId: string): Promise<Message[]> => {
@@ -624,17 +624,17 @@ export const getMessages = async (conversationId: string): Promise<Message[]> =>
 };
 
 export const sendMessage = async (
-  conversationId: string, 
-  content: string, 
+  conversationId: string,
+  content: string,
   imageUri?: string,
   audioUri?: string,
   replyToId?: string,
   fileAsset?: { uri: string; name: string; mimeType: string; size?: number }
 ) => {
   const formData = new FormData();
-  
+
   if (content && content.trim()) formData.append('content', content);
-  
+
   if (imageUri) {
     const filename = imageUri.split('/').pop() || 'image.jpg';
     const match = /\.(\w+)$/.exec(filename);
@@ -681,8 +681,8 @@ export const getUserPreferences = async (): Promise<UserPreferences | null> => {
 };
 
 export const saveUserPreferences = async (
-  myColor: string, 
-  otherColor: string, 
+  myColor: string,
+  otherColor: string,
   wallpaperUri?: string | null
 ): Promise<UserPreferences | null> => {
   const formData = new FormData();
@@ -693,7 +693,7 @@ export const saveUserPreferences = async (
     const filename = wallpaperUri.split('/').pop() || 'wallpaper.jpg';
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : `image/jpeg`;
-    
+
     formData.append('wallpaper', {
       uri: wallpaperUri,
       name: filename,
@@ -784,13 +784,23 @@ export const gameService = {
     }
   },
 
-  // Compra ou Joga (A lógica de debitar créditos é no backend)
+  // Busca detalhes de um jogo (incluindo HTML pesado)
+  getById: async (gameId: string) => {
+    try {
+      const { data } = await api.get(`/mobile/games/${gameId}`);
+      return data as Game & { htmlContent: string };
+    } catch (error) {
+      console.error("Erro ao buscar detalhes do game:", error);
+      return null;
+    }
+  },
+
+  // Compra ou Joga
   buyOrPlay: async (gameId: string) => {
     try {
       const { data } = await api.post(`/mobile/games/${gameId}/buy`);
       return { success: true, data };
     } catch (error: any) {
-      // Tratamento especial para erro 402 (Sem saldo)
       if (error.response?.status === 402) {
         return { success: false, error: 'insufficient_funds' };
       }
@@ -798,22 +808,58 @@ export const gameService = {
     }
   },
 
-  // Criação do Jogo
+  // Criação Manual ou Importação
   create: async (payload: {
     title: string;
     description: string;
     htmlContent: string;
     orientation: 'PORTRAIT' | 'LANDSCAPE';
-    mode: 'IMPORT' | 'CREATE'; // IMPORT (45c) ou CREATE (60c)
+    mode: 'IMPORT' | 'CREATE';
+    coverUri?: string | null;
   }) => {
     try {
-      const { data } = await api.post('/mobile/games/create', payload);
-      return { success: true, game: data };
+      if (payload.coverUri) {
+        const formData = new FormData();
+        formData.append('title', payload.title);
+        formData.append('description', payload.description);
+        formData.append('htmlContent', payload.htmlContent);
+        formData.append('orientation', payload.orientation);
+        formData.append('mode', payload.mode);
+
+        const filename = payload.coverUri.split('/').pop() || 'cover.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('cover', {
+            uri: payload.coverUri,
+            name: filename,
+            type,
+        } as any);
+
+        const { data } = await api.post('/mobile/games/create', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return { success: true, game: data };
+      } else {
+        const { data } = await api.post('/mobile/games/create', payload);
+        return { success: true, game: data };
+      }
     } catch (error: any) {
       if (error.response?.status === 402) {
         return { success: false, error: 'insufficient_funds' };
       }
       return { success: false, error: error.message };
+    }
+  },
+
+  // --- NOVA FUNÇÃO QUE FALTAVA ---
+  // Chama a rota que dispara o Webhook do N8N
+  generateWithAi: async (payload: { title: string; prompt: string; orientation: string }) => {
+    try {
+        const { data } = await api.post('/mobile/games/ai/generate', payload);
+        return { success: true, gameId: data.gameId };
+    } catch (error: any) {
+        return { success: false, error: error.response?.status === 402 ? 'insufficient_funds' : 'error' };
     }
   }
 };

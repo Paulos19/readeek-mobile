@@ -1,0 +1,88 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "readeek-game-gen",
+        "options": {}
+      },
+      "name": "Readeek Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert Game Developer for Mobile WebViews. \nYour task: Create a complete, single-file HTML5 game based on the user's prompt.\n\nRULES:\n1. MUST be a single HTML file with CSS and JS embedded.\n2. MUST use <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">\n3. MUST support Touch Events (touchstart) for controls. Do not rely only on keyboard.\n4. Design for high contrast (dark mode preferred).\n5. Return ONLY the raw HTML code. Do not use Markdown blocks (```html). Just the code."
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.body.prompt }}"
+            }
+          ]
+        }
+      },
+      "name": "AI Game Dev",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.body.callbackUrl }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "secret",
+              "value": "readeek-secure-key"
+            },
+            {
+              "name": "gameId",
+              "value": "={{ $json.body.gameId }}"
+            },
+            {
+              "name": "htmlContent",
+              "value": "={{ $json.response }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Callback Readeek",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [600, 300]
+    }
+  ],
+  "connections": {
+    "Readeek Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Game Dev",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Game Dev": {
+      "main": [
+        [
+          {
+            "node": "Callback Readeek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
