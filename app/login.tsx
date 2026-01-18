@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Keyboard, Platform } from 'react-native';
 import { useRouter, Link, useLocalSearchParams } from 'expo-router';
-import Animated, { 
-  FadeInDown, 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withSequence, 
-  withTiming, 
+import Animated, {
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
   withSpring,
   interpolateColor
 } from 'react-native-reanimated';
@@ -19,21 +19,21 @@ import { Logo } from './_components/auth/Logo'; // Sua logo animada
 import { useKeyboardShift } from '../_hooks/useKeyboardShift';
 
 // --- Componente de Input Rico (Local para encapsular lógica visual) ---
-const SmartInput = ({ 
-  value, 
-  onChangeText, 
-  placeholder, 
-  icon: Icon, 
-  isPassword = false, 
+const SmartInput = ({
+  value,
+  onChangeText,
+  placeholder,
+  icon: Icon,
+  isPassword = false,
   isValid = false,
   hasError = false,
   errorMessage = '',
   keyboardType = 'default',
-  onSubmit = () => {}
+  onSubmit = () => { }
 }: any) => {
   const [isFocused, setIsFocused] = useState(false);
   const [showPass, setShowPass] = useState(false);
-  
+
   // Animação de foco e erro na borda
   const borderColorProgress = useSharedValue(0);
 
@@ -43,7 +43,7 @@ const SmartInput = ({
     if (hasError) target = 2;
     else if (isFocused) target = 1;
     else if (isValid && value.length > 0) target = 3;
-    
+
     borderColorProgress.value = withTiming(target, { duration: 200 });
   }, [isFocused, hasError, isValid]);
 
@@ -58,15 +58,15 @@ const SmartInput = ({
 
   return (
     <View className="mb-4">
-      <Animated.View 
+      <Animated.View
         style={[animatedStyle, { borderWidth: 1 }]}
         className="flex-row items-center bg-zinc-900/80 rounded-2xl px-4 h-14"
       >
-        <Icon 
-          size={20} 
-          color={hasError ? '#ef4444' : (isFocused || isValid ? '#10b981' : '#71717a')} 
+        <Icon
+          size={20}
+          color={hasError ? '#ef4444' : (isFocused || isValid ? '#10b981' : '#71717a')}
         />
-        
+
         <TextInput
           className="flex-1 text-white ml-3 text-base font-medium h-full"
           placeholder={placeholder}
@@ -84,9 +84,9 @@ const SmartInput = ({
         {/* Ícones de Ação/Status na Direita */}
         <View className="flex-row items-center gap-2">
           {value.length > 0 && !hasError && !isPassword && (
-             isValid ? <CheckCircle2 size={18} color="#10b981" /> : null
+            isValid ? <CheckCircle2 size={18} color="#10b981" /> : null
           )}
-          
+
           {hasError && <XCircle size={18} color="#ef4444" />}
 
           {isPassword && (
@@ -96,11 +96,11 @@ const SmartInput = ({
           )}
         </View>
       </Animated.View>
-      
+
       {/* Mensagem de Erro Inline (Fallback Visual) */}
       {hasError && errorMessage ? (
-        <Animated.Text 
-          entering={FadeInDown} 
+        <Animated.Text
+          entering={FadeInDown}
           className="text-red-500 text-xs ml-2 mt-1 font-medium"
         >
           {errorMessage}
@@ -114,12 +114,12 @@ export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { signIn } = useAuthStore();
-  
+
   // Estados Locais
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Estados de Validação/Erro
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -181,8 +181,8 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       // O signIn do AuthStore lança erro se falhar (throw new Error)
-      await signIn(email, password); 
-      
+      await signIn(email, password);
+
       // Sucesso
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // O AuthStore ou Layout deve redirecionar. Se não:
@@ -191,19 +191,19 @@ export default function LoginScreen() {
     } catch (error: any) {
       // 4. TRATAMENTO DE ERRO SEM RESETAR INPUTS
       console.log("Login falhou mas inputs mantidos:", error.message);
-      
+
       // Decidimos onde mostrar o erro
       const msg = error.message || "Falha ao entrar";
-      
+
       if (msg.toLowerCase().includes("senha") || msg.toLowerCase().includes("password")) {
-         setPasswordError("Senha incorreta");
+        setPasswordError("Senha incorreta");
       } else if (msg.toLowerCase().includes("usuário") || msg.toLowerCase().includes("email")) {
-         setEmailError("E-mail não encontrado");
+        setEmailError("E-mail não encontrado");
       } else if (msg.toLowerCase().includes("credenciais")) {
-         // Erro genérico de credenciais -> Acusamos nos dois ou no geral
-         setGeneralError("E-mail ou senha incorretos.");
+        // Erro genérico de credenciais -> Acusamos nos dois ou no geral
+        setGeneralError("E-mail ou senha incorretos.");
       } else {
-         setGeneralError(msg);
+        setGeneralError(msg);
       }
 
       triggerShake();
@@ -219,8 +219,8 @@ export default function LoginScreen() {
   return (
     <View className="flex-1 bg-zinc-950">
       <StatusBar style="light" />
-      
-      <Animated.ScrollView 
+
+      <Animated.ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -230,8 +230,8 @@ export default function LoginScreen() {
           <Logo />
         </View>
 
-        <Animated.View 
-          style={[formAnimatedStyle]} 
+        <Animated.View
+          style={[formAnimatedStyle]}
           entering={FadeInDown.delay(200).duration(800)}
           className="w-full"
         >
@@ -262,8 +262,8 @@ export default function LoginScreen() {
 
           {/* Erro Geral (Ex: Servidor fora do ar, Credenciais inválidas genérico) */}
           {generalError ? (
-            <Animated.View 
-              entering={FadeInDown} 
+            <Animated.View
+              entering={FadeInDown}
               className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl flex-row items-center gap-3 mb-4"
             >
               <AlertCircle size={18} color="#ef4444" />
@@ -273,8 +273,11 @@ export default function LoginScreen() {
 
           {/* Botão Esqueci Senha */}
           <View className="flex-row justify-end mb-6">
-            <TouchableOpacity>
-              <Text className="text-zinc-500 font-medium">Esqueceu a senha?</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/forgot-password')}
+              className="self-end mb-6"
+            >
+              <Text className="text-zinc-400 text-sm">Esqueceu a senha?</Text>
             </TouchableOpacity>
           </View>
 
@@ -287,7 +290,7 @@ export default function LoginScreen() {
             activeOpacity={0.8}
           >
             {isLoading ? (
-               <ActivityIndicator color="#10b981" />
+              <ActivityIndicator color="#10b981" />
             ) : (
               <>
                 <Text className="text-zinc-950 font-bold text-lg mr-2">ENTRAR</Text>
@@ -299,16 +302,16 @@ export default function LoginScreen() {
         </Animated.View>
 
         {/* Footer */}
-        <Animated.View 
-          entering={FadeInDown.delay(400).duration(800)} 
+        <Animated.View
+          entering={FadeInDown.delay(400).duration(800)}
           className="flex-row justify-center mt-10 items-center"
         >
-            <Text className="text-zinc-500 text-base">Não possui conta? </Text>
-            <Link href="/sign-up" asChild>
-                <TouchableOpacity>
-                    <Text className="text-emerald-500 font-bold text-base p-2">Registre-se</Text>
-                </TouchableOpacity>
-            </Link>
+          <Text className="text-zinc-500 text-base">Não possui conta? </Text>
+          <Link href="/sign-up" asChild>
+            <TouchableOpacity>
+              <Text className="text-emerald-500 font-bold text-base p-2">Registre-se</Text>
+            </TouchableOpacity>
+          </Link>
         </Animated.View>
 
       </Animated.ScrollView>
