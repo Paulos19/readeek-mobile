@@ -12,14 +12,33 @@ export default function AppLayout() {
         animation: 'shift',
       }}
     >
-      {/* --- ABAS PRINCIPAIS --- */}
-      <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-      <Tabs.Screen name="library" options={{ title: 'Library' }} />
-      <Tabs.Screen name="social" options={{ title: 'Social' }} />
-      <Tabs.Screen name="community" options={{ title: 'Communities' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      {/* --- ABAS PRINCIPAIS (Visíveis na Barra Inferior) --- */}
+      <Tabs.Screen 
+        name="dashboard" 
+        options={{ title: 'Dashboard' }} 
+      />
+      
+      <Tabs.Screen 
+        name="library" 
+        options={{ title: 'Library' }} 
+      />
 
-      {/* --- ROTAS GAMES (Correção aplicada) --- */}
+      <Tabs.Screen 
+        name="social" 
+        options={{ title: 'Social' }} 
+      />
+
+      <Tabs.Screen 
+        name="community" 
+        options={{ title: 'Communities' }} 
+      />
+
+      <Tabs.Screen 
+        name="profile" 
+        options={{ title: 'Profile' }} 
+      />
+
+      {/* --- ROTAS GAMES (Imersivas - Sem TabBar) --- */}
       <Tabs.Screen 
         name="games/index" 
         options={{ 
@@ -48,19 +67,68 @@ export default function AppLayout() {
       />
 
       {/* --- ROTAS SHOP --- */}
-      <Tabs.Screen name="shop/index" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="shop/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="shop/create" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="product/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen 
+        name="shop/index" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="shop/[id]" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="shop/create" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="product/[id]" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+
+      {/* --- ROTAS WRITER (Editor) --- */}
+      <Tabs.Screen 
+        name="writer" 
+        options={{ 
+          href: null, 
+          headerShown: false,
+          tabBarStyle: { display: 'none' } 
+        }} 
+      />
+
+      {/* --- ROTAS READER (Leitura) --- */}
+      <Tabs.Screen 
+        name="read/[bookId]/index" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      
+      {/* --- ROTAS CHAT --- */}
+      <Tabs.Screen 
+        name="chat/index" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="chat/[id]" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="chat/settings" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
 
       {/* --- OUTRAS ROTAS --- */}
-      <Tabs.Screen name="writer" options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }} />
-      <Tabs.Screen name="read/[bookId]/index" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="chat/index" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="chat/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="chat/settings" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="users/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="social/create" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen 
+        name="users/[id]" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      <Tabs.Screen 
+        name="social/create" 
+        options={{ href: null, tabBarStyle: { display: 'none' } }} 
+      />
+      
+      {/* Sub-rotas do Dashboard (opcional, para garantir que não apareçam duplicadas ou com comportamento errado) */}
+      <Tabs.Screen name="dashboard/settings/page" options={{ href: null }} />
+      <Tabs.Screen name="dashboard/library/page" options={{ href: null }} />
+      <Tabs.Screen name="dashboard/highlights/page" options={{ href: null }} />
+
     </Tabs>
   );
 }
